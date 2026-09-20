@@ -1,0 +1,45 @@
+name: Question / support
+description: Ask for help installing, configuring, or using BackupLint
+title: "[Question]: "
+body:
+  - type: input
+    id: version
+    attributes:
+      label: BackupLint version
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Deployment role
+      options:
+        - Standalone
+        - Agent
+        - Controller
+        - All-in-one
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: What are you trying to do?
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you tried?
+  - type: textarea
+    id: output
+    attributes:
+      label: Sanitized output / configuration
+      render: shell
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed passwords, tokens, private keys, repository credentials, internal infrastructure details, and personal data.
+          required: true

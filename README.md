@@ -230,6 +230,17 @@ Container images: digest-pinned `python:3.12-slim-bookworm`, Trivy-reviewed, res
 | Validation evidence | [docs/validation.md](docs/validation.md) |
 | Release notes | [docs/release-notes-v1.0.0.md](docs/release-notes-v1.0.0.md) |
 
+## Feedback, bugs, and questions
+
+Feedback is welcome. Please use the channel that matches what you need:
+
+- **Bug report:** [open a bug report](https://github.com/Netryon/BackupLint/issues/new?template=bug_report.yml)
+- **Feature request / improvement idea:** [request a feature](https://github.com/Netryon/BackupLint/issues/new?template=feature_request.yml)
+- **Setup / usage question:** [ask a question](https://github.com/Netryon/BackupLint/issues/new?template=question.yml)
+- **Security vulnerability:** use a [private GitHub Security Advisory](https://github.com/Netryon/BackupLint/security/advisories/new) — do **not** post secrets or vulnerability details in a public issue.
+
+Before posting logs or configuration, remove passwords, tokens, private keys, internal hostnames/IPs, repository credentials, and personal data.
+
 ## Development install
 
 For contributors only (editable tree + test extras):

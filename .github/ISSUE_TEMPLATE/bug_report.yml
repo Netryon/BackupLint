@@ -1,0 +1,81 @@
+name: Bug report
+description: Report a reproducible BackupLint problem
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Remove secrets, tokens, private keys, repository credentials, internal hostnames/IPs, and personal data before submitting.
+  - type: input
+    id: version
+    attributes:
+      label: BackupLint version
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Deployment role
+      options:
+        - Standalone
+        - Agent
+        - Controller
+        - All-in-one
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment form
+      options:
+        - Native / bare metal
+        - Docker / container
+        - Mixed native/container
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system / platform
+      placeholder: "Ubuntu 24.04 x86_64 / Raspberry Pi OS ARM64 / etc."
+    validations:
+      required: true
+  - type: input
+    id: restic
+    attributes:
+      label: Restic version (if relevant)
+      placeholder: "restic 0.x.x"
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include exact commands and sanitized configuration where useful.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs / output
+      render: shell
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed passwords, tokens, private keys, repository credentials, internal infrastructure details, and personal data.
+          required: true
+        - label: This is not a security vulnerability requiring private disclosure.
+          required: true

@@ -2,13 +2,17 @@
 
 ## Supported versions
 
-Security fixes will target the latest published release once packaging begins.
+Security fixes target the latest published stable release. For the initial public launch, that is **BackupLint v1.0.0**.
 
 ## Reporting a vulnerability
 
-If you discover a security issue in BackupLint, please open a private security advisory on the GitHub repository when available, or contact the repository maintainers through GitHub.
+Please report suspected security vulnerabilities through a **private GitHub Security Advisory**:
 
-Do not include production secrets, live backup passwords, or personal data in public issues.
+https://github.com/Netryon/BackupLint/security/advisories/new
+
+Do **not** file a public issue with vulnerability details, production secrets, live backup passwords, private keys, tokens, internal infrastructure details, or personal data.
+
+Include enough sanitized information to reproduce and assess the issue: affected BackupLint version, deployment role, native/container form, platform, impact, and reproduction steps.
 
 ## Design expectations
 

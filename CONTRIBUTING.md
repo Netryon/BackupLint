@@ -2,6 +2,16 @@
 
 BackupLint is one product. Please keep changes scoped, tested, and consistent with the public security model: **read-only diagnostics**, no secret printing, no modification of Compose files, volumes, or backup repositories.
 
+## Ways to participate
+
+- Found a bug? Use the **Bug report** issue form.
+- Have an improvement or feature idea? Use the **Feature request** issue form.
+- Need help installing, configuring, or using BackupLint? Use the **Question / support** issue form.
+- Found a security vulnerability? Follow [SECURITY.md](SECURITY.md) and use a private GitHub Security Advisory instead of a public issue.
+- Want to contribute code or documentation? Open a pull request.
+
+When sharing logs, configuration, screenshots, or reproduction data, remove passwords, tokens, private keys, repository credentials, internal infrastructure details, and personal data.
+
 ## Development setup
 
 ```bash
