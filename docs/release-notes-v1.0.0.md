@@ -1,6 +1,6 @@
 # BackupLint v1.0.0 release notes
 
-Public draft for the `1.0.0` package. Not a GitHub Release and not a publication approval.
+In-tree notes for the `1.0.0` package. The GitHub Release for tag `v1.0.0` is the canonical artifact list and checksums. PyPI and GHCR publication remain owner-controlled.
 
 ## What BackupLint is
 

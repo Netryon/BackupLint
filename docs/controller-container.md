@@ -73,7 +73,7 @@ Prefer stopping the controller (SIGTERM) before filesystem snapshots so WAL is c
 
 ### What must never be embedded in the image
 
-- Any `*.key`, PEMs with private material, SQLite DBs, enrollment tokens, workshop evidence paths
+- Any `*.key`, PEMs with private material, SQLite DBs, enrollment tokens, or local evidence paths
 
 ### Required permissions / ownership
 
@@ -221,7 +221,7 @@ via SQLite WAL as long as the volume was not corrupted.
 
 1. **Backup** `/state` (after SIGTERM stop when possible).
 2. **Stop** old container (`docker stop -t 10`).
-3. **Build/pull** new controller image (do not push from this workshop task).
+3. **Build/pull** the new controller image. Do not push to a registry unless the owner has authorized publication.
 4. **Start** new container with the **same** `/state` volume and hostname env.
 5. **Health** — wait until HEALTHCHECK / `/v1/health` succeeds.
 6. **Validate** — `controller agents` still lists expected agents; revoked stay revoked.
@@ -262,14 +262,14 @@ docker run --rm \
 ```
 
 Uses unique volumes/names, free ports, cleans up on success, preserves logs under
-a temp directory on failure, and never touches workshop/scale databases.
+a temp directory on failure, and never touches operator databases outside those unique volumes.
 
 ---
 
 ## Image hygiene / SBOM / vulnerability scan (release procedure)
 
 Build contains only runtime package sources (see `.dockerignore`: no tests,
-workshop docs, evidence, keys, or local DBs). OCI labels include title, source,
+docs, evidence, keys, or local DBs). OCI labels include title, source,
 license, and version.
 
 Repeatable local release checks (tools optional — do not fail CI if missing):

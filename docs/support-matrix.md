@@ -25,5 +25,5 @@ Current-candidate evidence for the v1.0.0 release metadata lineage (product code
 
 ## How to read this
 
-- **tested** = closed on the current release candidate lineage for the documented scope
+- **tested** = closed on the v1.0.0 current-candidate evidence lineage for the documented scope
 - **not claimed** / **unsupported** = do not document as a v1.0.0 current-candidate proof

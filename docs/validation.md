@@ -40,6 +40,6 @@ See [architecture.md](architecture.md). Tests treat a missing repository as oper
 
 ## Artifacts
 
-Release wheel and sdist checksums belong with the signed release publication when the owner publishes them. Until then, treat locally built artifacts as unpublished.
+Wheel, sdist, and `SHA256SUMS` for this release are on the private [v1.0.0 GitHub Release](https://github.com/Netryon/BackupLint/releases/tag/v1.0.0). PyPI and GHCR remain unpublished until the owner publishes them. Treat any other locally built artifacts as unofficial.
 
 CI on `main` does not write repository secrets to logs.

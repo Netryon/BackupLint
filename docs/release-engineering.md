@@ -1,13 +1,14 @@
-# Release engineering (local release candidates)
+# Release engineering (local rebuilds)
 
-This document describes how to produce a **local BackupLint release candidate**.
+This document describes how to reproduce **local BackupLint 1.0.0** artifacts. The repository already has a private `v1.0.0` tag and GitHub Release; do not create additional public tags or registry publications without owner approval.
 
 ## Hard rules
 
 ```text
 No PyPI publication
-No public GitHub Release
-No final release tag
+No change of repository visibility
+No extra public GitHub Release
+No extra final release tag
 No container registry push
 without explicit owner approval
 ```
@@ -19,7 +20,7 @@ Package version is **1.0.0**. Dev strings such as `0.5.0.dev0` are historical on
 - Python 3.11+ with `venv`
 - `pip install build pip-audit ruff bandit pytest`
 - Docker Engine (for controller image / harness gates)
-- Clean Git worktree for formal RC builds
+- Clean Git worktree for formal rebuilds
 
 Optional (not required by the local gate):
 
@@ -85,9 +86,9 @@ python scripts/release/clean_room_install.py \
 ./scripts/release/independent_clone_gate.sh
 ```
 
-Exports `HEAD` via `git archive` into a temporary directory (no workshop untracked files), runs the RC workflow there, and installs the produced wheel.
+Exports `HEAD` via `git archive` into a temporary directory (no untracked working-tree files), runs the rebuild workflow there, and installs the produced wheel.
 
-## Controller container RC checks
+## Controller container rebuild checks
 
 The build records:
 

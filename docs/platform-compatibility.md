@@ -29,7 +29,7 @@ Automation lives in:
 - `scripts/provision-and-validate-vm.sh`
 - `test-lab/production/run-v02-integrity-campaign.sh`
 
-Per-guest artifacts: `docs/platform-reports/v02-*/` (workshop only).
+Per-guest artifacts from that campaign are not shipped in this repository.
 
 ## Results (v0.2)
 
