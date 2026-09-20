@@ -1,0 +1,78 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "backuplint"
+version = "1.0.0"
+description = "Check whether Docker Compose persistent data is covered by backup configuration"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+authors = [
+  { name = "BackupLint contributors" }
+]
+dependencies = [
+  "typer>=0.12",
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "hypothesis>=6.100",
+  "ruff>=0.6",
+  "bandit>=1.7",
+  "pip-audit>=2.7",
+]
+browser = [
+  "playwright>=1.40",
+  "pytest-playwright>=0.5",
+]
+
+[project.scripts]
+backuplint = "backuplint.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"backuplint.fleet.dashboard" = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "S108", "S603", "S607"]
+"tests/browser/**" = ["S101", "S105", "S106", "S108", "S310", "S603", "S607"]
+"tests/helpers/dashboard_lab.py" = ["S101"]
+"scripts/overnight*.py" = ["S101", "S108", "S603", "S607"]
+"scripts/release/**" = ["S603", "S607"]
+"src/backuplint/cli.py" = ["B008"]
+"src/backuplint/policy/cli.py" = ["B008"]
+"src/backuplint/classify.py" = ["S108"]
+"src/backuplint/fleet/agent.py" = ["S310"]
+"tests/unit/test_fleet_security.py" = ["S310"]
+"tests/unit/test_fleet_saturation.py" = ["S310"]
+"tests/unit/test_controller_shutdown.py" = ["S310"]
+"tests/unit/test_dashboard_http.py" = ["S310"]
+"tests/unit/test_post_expert_hardening.py" = ["S310"]
+"tests/unit/test_fleet_policy_api.py" = ["S310"]
+"tests/unit/test_v08_policy_security_campaign.py" = ["S310"]
+"scripts/dashboard-concurrent-load.py" = ["S310", "S108"]
+"scripts/v07-siem-isolation-campaign.py" = ["S101", "S310", "S108"]
+"scripts/dashboard-platform-smoke.py" = ["S310"]
+"docker/controller-healthcheck.py" = ["S310"]
+"docker/controller-preflight.py" = ["S108"]
+"tests/integration/test_controller_container.py" = ["S310", "S603", "S607"]
+"src/backuplint/fleet/dashboard/query.py" = ["S608"]
+"src/backuplint/siem/queue.py" = ["S608"]
+"src/backuplint/fleet/dashboard/ui.py" = ["E501"]

@@ -1,0 +1,12 @@
+services:
+  sonarr:
+    image: alpine:3.20
+    volumes:
+      - ./sonarr:/config
+  radarr:
+    image: alpine:3.20
+    volumes:
+      - ./radarr:/config
+      - media:/data
+volumes:
+  media:

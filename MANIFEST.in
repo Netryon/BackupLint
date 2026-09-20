@@ -1,0 +1,13 @@
+# Explicit sdist membership for release hygiene.
+include LICENSE README.md pyproject.toml SECURITY.md
+graft src
+graft docker
+include Dockerfile.controller
+global-exclude *.py[cod] __pycache__ .DS_Store
+prune docs
+prune tests
+prune test-lab
+prune scripts
+prune deploy
+prune .github
+exclude AGENT_*.md

@@ -1,0 +1,27 @@
+# Simple controller-only Compose example (development / first bring-up).
+# From the repository root:
+#   docker compose -f deploy/controller/compose.yml up --build
+#
+# For production-oriented defaults see compose.hardened.yml.
+
+services:
+  backuplint-controller:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.controller
+    image: backuplint-controller:local
+    container_name: backuplint-controller
+    restart: unless-stopped
+    ports:
+      - "8443:8443"
+    environment:
+      BACKUPLINT_CONTROLLER_DATA_DIR: /state
+      BACKUPLINT_CONTROLLER_LISTEN: 0.0.0.0:8443
+      # Must match how agents reach this controller (SAN / hostname check).
+      BACKUPLINT_CONTROLLER_HOSTNAME: localhost
+    volumes:
+      - controller-state:/state
+    # No Docker socket. No host root mount. No Restic.
+
+volumes:
+  controller-state:

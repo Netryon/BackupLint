@@ -1,0 +1,3 @@
+# Scenario E: similar path name but not an actual parent
+backup_paths:
+  - ./app

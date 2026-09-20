@@ -1,0 +1,9 @@
+{
+  "services": {
+    "legacy": {
+      "volumes": [
+        "./data:/data:ro"
+      ]
+    }
+  }
+}

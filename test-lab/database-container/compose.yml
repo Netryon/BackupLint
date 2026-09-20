@@ -1,0 +1,9 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: backuplint-test-only
+      POSTGRES_USER: backuplint
+      POSTGRES_DB: backuplint
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data

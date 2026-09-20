@@ -1,0 +1,3 @@
+# Scenario D: parent path covers multiple application directories
+backup_paths:
+  - ./apps

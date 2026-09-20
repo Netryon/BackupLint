@@ -1,0 +1,57 @@
+name: Release validation
+
+# Non-publishing release-candidate validation.
+# Never publishes to PyPI, never pushes images, never creates GitHub Releases/tags.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-validation:
+    name: Release candidate gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install build pip-audit ruff bandit pytest hypothesis
+          pip install -e ".[dev]"
+
+      - name: Version consistency
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, "scripts/release")
+          from common import assert_versions_consistent, repo_root
+          print(assert_versions_consistent(repo_root()))
+          PY
+
+      - name: Release gates (skip container in GHA runners by default)
+        env:
+          NO_COLOR: "1"
+        run: |
+          python scripts/release/run_gates.py \
+            --outdir dist-release \
+            --force \
+            --skip-container \
+            --skip-harness
+
+      - name: Upload local RC artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: backuplint-release-candidate
+          path: dist-release/
+          if-no-files-found: error
+          retention-days: 14

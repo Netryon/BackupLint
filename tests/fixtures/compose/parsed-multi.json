@@ -1,0 +1,33 @@
+{
+  "services": {
+    "sonarr": {
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/srv/sonarr",
+          "target": "/config"
+        }
+      ]
+    },
+    "postgres": {
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "postgres-data",
+          "target": "/var/lib/postgresql/data"
+        },
+        {
+          "type": "tmpfs",
+          "target": "/tmp"
+        },
+        {
+          "type": "bind",
+          "source": "/srv/pg-conf",
+          "target": "/etc/postgresql",
+          "read_only": true
+        }
+      ]
+    },
+    "empty": {}
+  }
+}

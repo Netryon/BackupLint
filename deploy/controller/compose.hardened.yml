@@ -1,0 +1,40 @@
+# Hardened controller-only Compose example.
+# From the repository root:
+#   docker compose -f deploy/controller/compose.hardened.yml up --build
+#
+# Requires: Docker Engine with Compose v2. No agent services. No Docker socket.
+
+services:
+  backuplint-controller:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.controller
+    image: backuplint-controller:local
+    container_name: backuplint-controller
+    restart: unless-stopped
+    ports:
+      - "8443:8443"
+    environment:
+      BACKUPLINT_CONTROLLER_DATA_DIR: /state
+      BACKUPLINT_CONTROLLER_LISTEN: 0.0.0.0:8443
+      BACKUPLINT_CONTROLLER_HOSTNAME: localhost
+      HOME: /state
+      TMPDIR: /tmp
+    volumes:
+      # Persist CA, server TLS material, agent cert copies, and SQLite (+ WAL).
+      - controller-state:/state
+    read_only: true
+    tmpfs:
+      # OpenSSL and Python tempfile need ephemeral scratch under RO rootfs.
+      - /tmp:size=32m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # Non-swarm Compose resource controls (ignored in some Swarm-only fields).
+    mem_limit: 512m
+    pids_limit: 256
+    # No privileged mode. No Docker socket. No host root mount.
+
+volumes:
+  controller-state:

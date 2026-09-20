@@ -1,0 +1,64 @@
+# BackupLint fleet controller image (no Docker socket, no Restic, no Compose tooling).
+# Build from the repository root:
+#   docker build -f Dockerfile.controller -t backuplint-controller:local .
+#
+# Durable CA/TLS/SQLite state must be mounted at /state (see docs/controller-container.md).
+
+# Pin the Debian bookworm slim digest so release images are auditable.
+# python:3.12-slim-bookworm @ 2026-09-19 (includes libpcre2 10.42-1+deb12u1).
+FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e
+
+ARG BACKUPLINT_UID=10001
+ARG BACKUPLINT_GID=10001
+ARG BACKUPLINT_VERSION=1.0.0
+ARG BACKUPLINT_REVISION=unknown
+
+LABEL org.opencontainers.image.title="BackupLint Controller" \
+      org.opencontainers.image.description="HTTPS fleet controller (no Docker socket, no Restic)" \
+      org.opencontainers.image.source="https://github.com/Netryon/backuplint" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.version="${BACKUPLINT_VERSION}" \
+      org.opencontainers.image.revision="${BACKUPLINT_REVISION}" \
+      org.opencontainers.image.vendor="BackupLint"
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid "${BACKUPLINT_GID}" backuplint \
+    && useradd --system --uid "${BACKUPLINT_UID}" --gid backuplint \
+        --home-dir /state --shell /usr/sbin/nologin backuplint
+
+WORKDIR /app
+
+# Copy metadata first for better layer caching, then application sources.
+COPY pyproject.toml README.md LICENSE ./
+COPY src ./src
+COPY docker/controller-entrypoint.sh \
+     docker/controller-healthcheck.py \
+     docker/controller-preflight.py \
+     ./docker/
+
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir . \
+    && chmod 755 \
+        /app/docker/controller-entrypoint.sh \
+        /app/docker/controller-healthcheck.py \
+        /app/docker/controller-preflight.py \
+    && mkdir -p /state \
+    && chown backuplint:backuplint /state \
+    && backuplint --version
+
+ENV BACKUPLINT_CONTROLLER_DATA_DIR=/state \
+    BACKUPLINT_CONTROLLER_LISTEN=0.0.0.0:8443 \
+    BACKUPLINT_CONTROLLER_HOSTNAME=localhost \
+    HOME=/state \
+    TMPDIR=/tmp \
+    PYTHONUNBUFFERED=1
+
+USER backuplint:backuplint
+EXPOSE 8443
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD ["python", "/app/docker/controller-healthcheck.py"]
+
+ENTRYPOINT ["/app/docker/controller-entrypoint.sh"]

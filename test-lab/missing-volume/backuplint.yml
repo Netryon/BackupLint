@@ -1,0 +1,3 @@
+# Intentionally omit the Docker volumes directory so the named volume is uncovered.
+backup_paths:
+  - ./not-the-volume-dir

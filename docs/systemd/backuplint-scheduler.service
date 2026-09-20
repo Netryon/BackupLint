@@ -1,0 +1,22 @@
+[Unit]
+Description=BackupLint local scheduler (v0.4)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adjust user/paths for the host.
+User=backuplint
+Group=backuplint
+WorkingDirectory=/etc/backuplint
+ExecStart=/usr/bin/backuplint daemon /etc/backuplint/compose.yml --config /etc/backuplint/backuplint.yml
+Restart=on-failure
+RestartSec=5
+# Config reload is not supported; restart this unit after config changes.
+
+# Hardening (adjust if Compose/Restic paths require more access)
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

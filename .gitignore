@@ -1,0 +1,97 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.cache/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Packaging / build
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment and secrets — never commit real values
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_rsa
+id_rsa.pub
+credentials.json
+secrets.yml
+secrets.yaml
+restic-password*
+*.password
+
+# Local override configs that may contain paths or credentials
+backuplint.local.yml
+backuplint.local.yaml
+
+# Generated / private runtime artifacts
+*.log
+*.pcap
+*.pcapng
+*.sqlite
+*.sqlite3
+*.db
+tmp/
+temp/
+.test-data/
+soak-output/
+scanner-output/
+
+# Controller / agent runtime state (never commit live identities)
+**/bl-controller/
+**/controller.sqlite3
+**/agents/*/
+**/q.jsonl
+
+# Tooling
+.python-version
+
+# Test lab runtime data
+test-lab/**/data/
+test-lab/**/config/
+test-lab/**/vaultwarden/
+test-lab/**/sonarr/
+test-lab/**/radarr/
+test-lab/**/apps/
+test-lab/**/app/
+test-lab/**/app2/
+test-lab/**/not-the-volume-dir/
+test-lab/**/pgdata/
+test-lab/production/results.tsv
+
+# Raw platform / campaign exhaust (keep harnesses; ignore dumps)
+docs/platform-reports/
+docs/internal*/
+
+# Generated demo fixtures (absolute/local paths)
+docs/demo/fixture/

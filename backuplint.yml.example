@@ -1,0 +1,59 @@
+# Example BackupLint configuration.
+# Copy to backuplint.yml and adjust paths for your host.
+#
+# schema_version: 1   # optional; missing means legacy schema 1
+
+backup_paths:
+  - /srv/docker
+  - /srv/app-config
+
+# Optional freshness limit for Restic coverage (requires restic:).
+# max_backup_age: 24h
+
+# Optional: inspect an existing Restic repository (read-only).
+# Coverage uses the newest snapshot that covers each audited path.
+# Provide the password via password_file, restic.password SecretRef,
+# or RESTIC_PASSWORD / RESTIC_PASSWORD_FILE.
+#
+# restic:
+#   repository: /var/backups/restic
+#   password_file: ./restic.pass   # prefer mode 0600
+#   # Or:
+#   # password:
+#   #   source: env
+#   #   name: RESTIC_PASSWORD
+#   # password:
+#   #   source: systemd
+#   #   name: restic_password
+#   # password:
+#   #   source: mounted
+#   #   name: restic_password
+#   integrity:
+#     mode: standard          # off | standard | deep
+#     max_age: 7d             # optional remembered-success age when mode is off
+#     state_file: ./.backuplint-integrity.json
+#   restore_verification:
+#     mode: selected          # off | selected | full
+#     timeout: 30m
+#     expected_paths:
+#       - config.json
+
+# Optional: local scheduled verification (v0.4). Restart daemon after changes.
+# schedule:
+#   # state_dir: ~/.local/share/backuplint/schedule
+#   # jitter: 5m
+#   history_limit: 500
+#   coverage:
+#     every: 30m
+#   integrity:
+#     every: 6h
+#   restore_verification:
+#     every: 24h
+#   deep_integrity:
+#     every: 7d
+
+# Optional: submit scheduled results to a fleet controller (v0.5).
+# Enroll the agent first, then point identity_dir at the stored certs.
+# fleet:
+#   controller_url: https://controller.example:8443
+#   identity_dir: ./backuplint-agent

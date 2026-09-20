@@ -1,0 +1,11 @@
+services:
+  vaultwarden:
+    image: alpine:3.20
+    command: ["sleep", "3600"]
+    volumes:
+      - ./vaultwarden:/data
+  sonarr:
+    image: alpine:3.20
+    command: ["sleep", "3600"]
+    volumes:
+      - ./sonarr:/config
