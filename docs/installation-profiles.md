@@ -91,19 +91,17 @@ deployment: native
 
 ## Deployment support
 
-The model distinguishes:
-
-```text
-architecture valid  ≠  currently implemented
-```
-
-| Role × deployment | Status (foundation) |
-|-------------------|---------------------|
+| Role × deployment | v1 status |
+|-------------------|-----------|
 | any × native | implemented |
-| controller × container | architecture valid, planned (controller-container track) |
-| agent × container | architecture valid, limited (agent host-access model not ready) |
-| standalone × container | architecture valid, unsupported |
-| all_in_one × container | invalid / unsupported |
+| controller × container | implemented (tested, including mixed fleets) |
+| agent × container | implemented (uid 10001; Docker socket not required for heartbeat/enrollment/policy; Compose submit is optional and not default) |
+| standalone × container | unsupported |
+| all_in_one × container | unsupported |
+
+Container images are built from this repository. Official GHCR publication is a separate release step.
+
+Public packaging extras remain one `backuplint` distribution; the install plan still records recommended internal component splits.
 
 ## Install plan
 
@@ -117,8 +115,7 @@ Given a validated profile, `resolve_install_plan()` returns structured data:
 - missing requirements (when host probing is enabled)
 - recommended internal packaging extras (`core`, `scan`, `controller`, `agent`)
 
-Public packaging extras are **not** locked yet; the plan records the recommended
-split for a future packaging decision.
+The plan records recommended internal component splits (`core`, `scan`, `controller`, `agent`). v1 ships as a single `backuplint` package.
 
 ### CLI dry-run (foundation)
 
@@ -163,10 +160,9 @@ code. The `backuplint.install` package does not import scan/Restic code.
 
 ## Future installer work
 
-Not in this foundation:
+Not in v1:
 
-- interactive installer wizard
-- remote SSH provisioning
-- vendor adapters
-- automatic package installation
-- final public packaging extra names (documented as recommendations only)
+- remote SSH provisioning of other hosts
+- vendor adapters (Ansible/AWX/cloud-init) as first-class products
+
+The interactive installer wizard and unattended native mutation **are** implemented; see [native-installer.md](native-installer.md).

@@ -18,7 +18,14 @@ docker run --rm --entrypoint backuplint backuplint-controller:1.0.0 --version
 docker run --rm --user 10001:10001 --entrypoint id backuplint-agent:1.0.0
 ```
 
-Images are not published to Docker Hub or GHCR as part of this tree’s default workflow.
+Images are not published to Docker Hub or GHCR as part of this repository’s default workflow. Intended names if/when the owner publishes:
+
+```text
+ghcr.io/netryon/backuplint-controller:1.0.0
+ghcr.io/netryon/backuplint-agent:1.0.0
+```
+
+Until then, build locally from the `v1.0.0` tag.
 
 ## Persistent volumes
 

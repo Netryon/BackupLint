@@ -6,22 +6,23 @@ Python **3.11+** with `venv` is required. Rocky/Alma 9 should use `python3.11`. 
 
 ## Install from a release wheel (recommended)
 
+Download `backuplint-1.0.0-py3-none-any.whl` from the
+[v1.0.0 GitHub Release](https://github.com/Netryon/BackupLint/releases/tag/v1.0.0).
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
-pip install dist/backuplint-1.0.0-py3-none-any.whl
-backuplint --version   # BackupLint 1.0.0
+pip install backuplint-1.0.0-py3-none-any.whl
+backuplint --version   # backuplint 1.0.0
 ```
 
-From a clone of this repository:
+Then provision with the native installer if you want systemd and system directories:
 
 ```bash
-git clone https://github.com/Netryon/BackupLint.git
-cd BackupLint
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+sudo backuplint install --interactive --yes
+# or
+sudo backuplint install --profile profile.yaml --non-interactive --yes
 ```
 
 Confirm:
@@ -35,10 +36,12 @@ backuplint --version
 
 | Role | Typical use |
 | --- | --- |
-| Standalone | `backuplint scan` / `daemon` on the Compose host |
-| Controller | HTTPS fleet API, optional dashboard, optional SIEM export |
-| Agent | Enroll, heartbeat, submit local audits |
-| All-in-one | Controller and agent on the same host |
+| Standalone | Local `scan` / `daemon` only. No controller, no dashboard, does not receive other agents. |
+| Controller | Dedicated management node: HTTPS API, optional dashboard, policy, SIEM. |
+| Agent | Reports to an existing controller. No controller/dashboard on this machine. |
+| All-in-one | Local checks **and** fleet controller/dashboard on the **same** host. |
+
+Standalone never runs a controller. All-in-one does.
 
 Profiles and unattended native provisioning: [installation-profiles.md](installation-profiles.md) and [native-installer.md](native-installer.md).
 

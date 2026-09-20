@@ -7,9 +7,10 @@ agent (`backuplint agent enroll` / `backuplint agent run`).
 ## Scope
 
 | Claim | Status |
-|-------|--------|
-| Packaging + basic x86_64 workshop smoke | this document / current branch |
-| Cross-platform / advanced mixed production proof | **deferred** to advanced campaign |
+| --- | --- |
+| Agent container packaging | this document |
+| Native + container mixed fleets | tested for v1.0.0 current-candidate (see [support-matrix.md](support-matrix.md)) |
+| Compose/Restic submit from the agent image | optional; requires Docker tooling/socket — **not** default |
 
 ## What is included
 

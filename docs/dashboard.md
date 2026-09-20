@@ -1,4 +1,4 @@
-# BackupLint dashboard (v0.6)
+# BackupLint dashboard (v1)
 
 Optional **read-only** central web UI for fleet visibility. It runs on the
 fleet controller HTTPS listener and never opens SQLite from the browser.
@@ -42,9 +42,9 @@ Set `BACKUPLINT_CONTROLLER_DASHBOARD=1` and ensure
 `/state/dashboard/password.scrypt` exists (or pass
 `BACKUPLINT_DASHBOARD_PASSWORD_FILE`). Persist `/state` as usual.
 
-## Auth model (v0.6)
+## Auth model (v1)
 
-- Shared operator password (scrypt hash on disk)
+- Shared operator password (scrypt hash on disk, mode `0600`)
 - HttpOnly session cookie + SameSite=Strict (+ Secure on HTTPS)
 - CSRF token required for logout
 - Login rate limiting per client address
@@ -52,7 +52,7 @@ Set `BACKUPLINT_CONTROLLER_DASHBOARD=1` and ensure
 - API under `/v1/dashboard/*` requires the same session
 - Agent private keys and enrollment tokens are never exposed
 
-SSO/RBAC are deferred; room remains for stronger auth pre-v1.
+There is **no multi-user RBAC** and **no SSO** in v1.
 
 ## Health semantics
 
@@ -75,9 +75,9 @@ insecurely. Do not expose debug endpoints publicly.
 ## Read-only-first limitations
 
 - No remote commands, restore/cutover controls, or config push
-- No enterprise SSO/RBAC yet
+- No enterprise SSO/RBAC in v1
 - Sessions are in-process (re-login after controller restart)
-- Notifications are minimal/deferred
+- Notifications are minimal
 
 ## API (authenticated)
 
