@@ -404,7 +404,7 @@ class DashboardHttp:
                 trend = {
                     "schema_version": 1,
                     "buckets": [],
-                    "totals": {"PASS": 0, "WARN": 0, "FAIL": 0, "ERROR": 0},
+                    "totals": {"PASS": 0, "WARN": 0, "FAIL": 0, "ERROR": 0},  # nosec B105
                     "bucket_unit": "hour",
                 }
             return _html(

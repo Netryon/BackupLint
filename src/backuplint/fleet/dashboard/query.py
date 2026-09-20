@@ -350,7 +350,7 @@ class DashboardQueryService:
             end_dt = datetime.now(UTC)
         span = end_dt - start_dt
         bucket_len = 13 if span <= timedelta(hours=48) else 10  # hour vs day prefix
-        rows = self._execute(
+        rows = self._execute(  # nosec B608
             f"""
             SELECT substr(occurred_at, 1, {bucket_len}) AS bucket, status, COUNT(*) AS n
             FROM events
@@ -359,7 +359,7 @@ class DashboardQueryService:
             GROUP BY bucket, status
             ORDER BY bucket ASC
             LIMIT ?
-            """,  # noqa: S608
+            """,  # noqa: S608  # nosec B608
             (time_from[:64], time_to[:64], cap * len(TREND_STATUSES)),
         )
         buckets: dict[str, dict[str, int]] = {}

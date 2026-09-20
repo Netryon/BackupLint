@@ -608,7 +608,7 @@ def _audit_trend_chart(trend: dict[str, Any]) -> str:
   <p class="muted">No PASS/WARN/FAIL/ERROR events in this range.</p>
 </div>
 """
-    colors = {
+    colors = {  # nosec B105
         "PASS": "var(--ok)",
         "WARN": "var(--warn)",
         "FAIL": "var(--bad)",
@@ -650,7 +650,7 @@ def _audit_bars(audit: dict[str, Any]) -> str:
     keys = ("PASS", "WARN", "FAIL", "ERROR")
     vals = [int(audit.get(k) or 0) for k in keys]
     peak = max(vals) if vals else 0
-    colors = {
+    colors = {  # nosec B105
         "PASS": "var(--ok)",
         "WARN": "var(--warn)",
         "FAIL": "var(--bad)",
@@ -918,22 +918,22 @@ def page_history(
     time_range = window.get("time_range") or (qs.get("time_range") or ["24h"])[0]
     limit = (qs.get("limit") or ["50"])[0]
     failures = (qs.get("failures_only") or [""])[0] in {"1", "true", "yes"}
-    filters = f"""
-<form class="filters" method="get" action="/dashboard/history">
-  <select name="time_range">
-    {_opt("1h", time_range)}{_opt("24h", time_range)}{_opt("7d", time_range)}{_opt("custom", time_range)}
-  </select>
-  <input name="agent_id" value="{_e(agent_id)}" placeholder="agent_id" maxlength="128"/>
-  <input name="event_type" value="{_e(event_type)}" placeholder="event_type" maxlength="64"/>
-  <input name="status" value="{_e(status)}" placeholder="status" maxlength="32"/>
-  <input name="time_from" value="{_e(time_from)}" placeholder="time_from ISO" maxlength="64"/>
-  <input name="time_to" value="{_e(time_to)}" placeholder="time_to ISO" maxlength="64"/>
-  <input type="hidden" name="limit" value="{_e(limit)}"/>
-  <label><input type="checkbox" name="failures_only" value="1" {"checked" if failures else ""}/> Failures only</label>
-  <button type="submit">Filter</button>
-  <a href="/dashboard/history">Clear</a>
-</form>
-"""
+    filters = (
+        '<form class="filters" method="get" action="/dashboard/history">\n'  # nosec B608
+        "  <select name=\"time_range\">\n"
+        f"    {_opt('1h', time_range)}{_opt('24h', time_range)}{_opt('7d', time_range)}{_opt('custom', time_range)}\n"
+        "  </select>\n"
+        f'  <input name="agent_id" value="{_e(agent_id)}" placeholder="agent_id" maxlength="128"/>\n'
+        f'  <input name="event_type" value="{_e(event_type)}" placeholder="event_type" maxlength="64"/>\n'
+        f'  <input name="status" value="{_e(status)}" placeholder="status" maxlength="32"/>\n'
+        f'  <input name="time_from" value="{_e(time_from)}" placeholder="time_from ISO" maxlength="64"/>\n'
+        f'  <input name="time_to" value="{_e(time_to)}" placeholder="time_to ISO" maxlength="64"/>\n'
+        f'  <input type="hidden" name="limit" value="{_e(limit)}"/>\n'
+        f'  <label><input type="checkbox" name="failures_only" value="1" {"checked" if failures else ""}/> Failures only</label>\n'
+        '  <button type="submit">Filter</button>\n'
+        '  <a href="/dashboard/history">Clear</a>\n'
+        "</form>\n"
+    )
     rows = "".join(
         "<tr>"
         f"<td>{_e(ev.get('occurred_at'))}</td>"

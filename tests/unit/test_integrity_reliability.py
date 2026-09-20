@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
@@ -71,17 +71,16 @@ def test_integrity_runs_once_for_many_mounts(tmp_path: Path) -> None:
         requested=True,
     )
     with patch("backuplint.audit.discover_mounts", return_value=services):
-        with patch("backuplint.audit.list_snapshots", return_value=snapshots) as list_snaps:
-            with patch(
-                "backuplint.audit.check_repository_integrity",
-                return_value=integrity,
-            ) as check:
-                result = runner.invoke(
-                    app, ["scan", str(compose), "--config", str(config)]
-                )
+        engine = MagicMock()
+        engine.list_snapshots.return_value = snapshots
+        engine.integrity_check.return_value = integrity
+        with patch("backuplint.audit.get_backup_engine", return_value=engine):
+            result = runner.invoke(
+                app, ["scan", str(compose), "--config", str(config)]
+            )
     assert result.exit_code == 0, result.stdout + result.stderr
-    assert list_snaps.call_count == 1
-    assert check.call_count == 1
+    assert engine.list_snapshots.call_count == 1
+    assert engine.integrity_check.call_count == 1
     assert "Restic integrity" in result.stdout
 
 

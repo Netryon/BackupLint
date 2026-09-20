@@ -48,7 +48,7 @@ def test_scan_rejects_workshop_path_content(tmp_path: Path) -> None:
     sdist = tmp_path / "backuplint-0.5.0.dev0.tar.gz"
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w:gz") as tf:
-        data = b"path=/tmp/example-secret-stuff\n"
+        data = b"path=/home/sysadmin/example-secret-stuff\n"
         info = tarfile.TarInfo(name="backuplint-0.5.0.dev0/README.md")
         info.size = len(data)
         tf.addfile(info, io.BytesIO(data))

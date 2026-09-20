@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/logo-mark.svg" width="72" height="72" alt="BackupLint logo">
+  <img src="docs/images/logo-mark-blue.svg" width="72" height="72" alt="BackupLint logo">
 </p>
 
 <h1 align="center">BackupLint</h1>
