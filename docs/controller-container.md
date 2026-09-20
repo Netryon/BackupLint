@@ -37,8 +37,7 @@ Mount a single writable volume at `/state` (default `BACKUPLINT_CONTROLLER_DATA_
     server.crt      # server TLS cert (SAN includes BACKUPLINT_CONTROLLER_HOSTNAME)
   agents/
     <agent_id>/
-      client.key    # PRIVATE — controller-retained copy (current enrollment model)
-      client.crt
+      client.crt    # signed agent certificate copy (private key stays on the agent)
   controller.sqlite3
   controller.sqlite3-wal   # while running — same volume as DB
   controller.sqlite3-shm
@@ -68,9 +67,9 @@ Prefer stopping the controller (SIGTERM) before filesystem snapshots so WAL is c
 
 - `ca/ca.key`
 - `server/server.key`
-- `agents/*/client.key` (current model retains controller-side copies)
+- `agents/*/client.crt` (signed agent certificate copy)
 
-**Known security limitation (not changed in this branch):** enrollment currently has the controller generate and retain agent private keys. A future CSR / agent-held-key redesign is the intended direction; do not treat controller volume theft as low impact.
+**Enrollment is CSR-based:** the agent generates and holds `client.key`. The controller signs the CSR and does not receive the agent private key. Controller volume theft still exposes the fleet CA and historical results; treat `/state` as high-impact.
 
 ### What must never be embedded in the image
 

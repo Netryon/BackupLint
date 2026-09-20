@@ -95,7 +95,7 @@ interpreted optimistically.
 ## Security notes
 
 - TLS 1.2+ with server certificate verification (no plaintext fallback).
-- Enrollment uses a short-lived one-time token; token values are not logged.
+- Enrollment uses a short-lived one-time token plus an agent-generated CSR; the agent private key never leaves the agent. Token values are not logged.
 - After enrollment, agents authenticate with unique client certificates (mTLS).
 - Revoke with `backuplint controller revoke <agent_id>`.
 - Result envelopes reject obvious secret-bearing keys.
