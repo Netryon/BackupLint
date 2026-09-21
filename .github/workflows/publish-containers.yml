@@ -83,3 +83,43 @@ jobs:
       - name: Record digest
         run: |
           echo "Published ghcr.io/netryon/${{ matrix.image }}@${{ steps.push.outputs.digest }}"
+
+  verify-pull:
+    name: Verify GHCR pull
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull, inspect, and smoke version
+        run: |
+          set -euo pipefail
+          docker pull ghcr.io/netryon/backuplint-controller:1.0.0
+          docker pull ghcr.io/netryon/backuplint-agent:1.0.0
+          docker inspect ghcr.io/netryon/backuplint-controller:1.0.0 \
+            --format '{{index .RepoDigests 0}} revision={{index .Config.Labels "org.opencontainers.image.revision"}} source={{index .Config.Labels "org.opencontainers.image.source"}}'
+          docker inspect ghcr.io/netryon/backuplint-agent:1.0.0 \
+            --format '{{index .RepoDigests 0}} revision={{index .Config.Labels "org.opencontainers.image.revision"}} source={{index .Config.Labels "org.opencontainers.image.source"}}'
+          docker run --rm --entrypoint backuplint ghcr.io/netryon/backuplint-controller:1.0.0 --version
+          docker run --rm --entrypoint backuplint ghcr.io/netryon/backuplint-agent:1.0.0 --version
+
+      - name: Package metadata
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          OWNER="${GITHUB_REPOSITORY_OWNER}"
+          for pkg in backuplint-controller backuplint-agent; do
+            echo "=== ${pkg} ==="
+            gh api "/users/${OWNER}/packages/container/${pkg}" || \
+              gh api "/orgs/${OWNER}/packages/container/${pkg}" || \
+              echo "package metadata API not readable from this token context"
+          done

@@ -140,14 +140,23 @@ Roles, layout, CSR enrollment, upgrades, uninstall: [docs/installation.md](docs/
 
 ## Docker install
 
-Native and container deployments are both supported. Official registry images are **not published yet**; build from the `v1.0.0` tag:
+Official GHCR images are published for **linux/amd64**. Raspberry Pi 4 remains a native-install current-candidate platform.
 
 ```bash
-docker build -f Dockerfile.controller -t backuplint-controller:1.0.0 .
-docker build -f Dockerfile.agent -t backuplint-agent:1.0.0 .
+docker pull ghcr.io/netryon/backuplint-controller:1.0.0
+docker pull ghcr.io/netryon/backuplint-agent:1.0.0
 ```
 
+The same images are also tagged `v1.0.0` and `latest` (stable 1.0.0 convenience tag). Prefer digest pinning in production; immutable digests are listed on the [v1.0.0 GitHub Release](https://github.com/Netryon/BackupLint/releases/tag/v1.0.0).
+
 Controller and agent images run as **uid 10001**. Privileged mode is not required. A Docker socket is **not** required for heartbeat, enrollment, or policy. Compose discovery **inside** an agent container needs intentional host/Docker access (not the default).
+
+Local source builds remain available as an advanced option:
+
+```bash
+docker build -f Dockerfile.controller --build-arg BACKUPLINT_VERSION=1.0.0 -t backuplint-controller:1.0.0 .
+docker build -f Dockerfile.agent --build-arg BACKUPLINT_VERSION=1.0.0 -t backuplint-agent:1.0.0 .
+```
 
 [docs/docker.md](docs/docker.md)
 

@@ -2,13 +2,46 @@
 
 Controller and agent images are **additive**. They do not replace native installs. Base image is digest-pinned `python:3.12-slim-bookworm`. Runtime user is **uid/gid 10001**. Privileged mode is not required. The Docker socket is **not** required for fleet heartbeat, enrollment, or policy.
 
+Official GHCR images are **linux/amd64**. Raspberry Pi 4 is a current-candidate **native** platform; this first GHCR publication does not claim a multi-arch container manifest.
+
 Do not treat remaining OS/library CVEs in the base image as a “zero CVE” claim. See [security.md](security.md).
 
-## Build locally
+## Pull from GHCR
 
 ```bash
-docker build -f Dockerfile.controller -t backuplint-controller:1.0.0 .
-docker build -f Dockerfile.agent -t backuplint-agent:1.0.0 .
+docker pull ghcr.io/netryon/backuplint-controller:1.0.0
+docker pull ghcr.io/netryon/backuplint-agent:1.0.0
+```
+
+Tags for this release:
+
+```text
+ghcr.io/netryon/backuplint-controller:1.0.0
+ghcr.io/netryon/backuplint-controller:v1.0.0
+ghcr.io/netryon/backuplint-controller:latest
+ghcr.io/netryon/backuplint-agent:1.0.0
+ghcr.io/netryon/backuplint-agent:v1.0.0
+ghcr.io/netryon/backuplint-agent:latest
+```
+
+`latest` is the stable 1.0.0 convenience tag. Pin production deployments to an immutable digest from the [v1.0.0 GitHub Release](https://github.com/Netryon/BackupLint/releases/tag/v1.0.0):
+
+```bash
+docker pull ghcr.io/netryon/backuplint-controller@sha256:<digest>
+docker pull ghcr.io/netryon/backuplint-agent@sha256:<digest>
+```
+
+## Build locally (advanced)
+
+```bash
+docker build -f Dockerfile.controller \
+  --build-arg BACKUPLINT_VERSION=1.0.0 \
+  --build-arg BACKUPLINT_REVISION="$(git rev-parse HEAD)" \
+  -t backuplint-controller:1.0.0 .
+docker build -f Dockerfile.agent \
+  --build-arg BACKUPLINT_VERSION=1.0.0 \
+  --build-arg BACKUPLINT_REVISION="$(git rev-parse HEAD)" \
+  -t backuplint-agent:1.0.0 .
 ```
 
 Confirm:
@@ -17,15 +50,6 @@ Confirm:
 docker run --rm --entrypoint backuplint backuplint-controller:1.0.0 --version
 docker run --rm --user 10001:10001 --entrypoint id backuplint-agent:1.0.0
 ```
-
-Images are not published to Docker Hub or GHCR as part of this repository’s default workflow. Intended names if/when the owner publishes:
-
-```text
-ghcr.io/netryon/backuplint-controller:1.0.0
-ghcr.io/netryon/backuplint-agent:1.0.0
-```
-
-Until then, build locally from the `v1.0.0` tag.
 
 ## Persistent volumes
 
@@ -45,7 +69,7 @@ docker run --rm --name backuplint-controller \
   -p 8443:8443 \
   -e BACKUPLINT_CONTROLLER_HOSTNAME=controller.example \
   -v backuplint-controller-state:/state \
-  backuplint-controller:1.0.0
+  ghcr.io/netryon/backuplint-controller:1.0.0
 ```
 
 Hardened sketch: `--read-only --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp`. Compose files: `deploy/controller/compose.yml` and `deploy/controller/compose.hardened.yml`.
@@ -65,7 +89,7 @@ docker run --rm --name backuplint-agent \
   -e BL_TOKEN=... \
   -v backuplint-agent-state:/state \
   -v "$PWD/ca.crt:/config/ca.crt:ro" \
-  backuplint-agent:1.0.0
+  ghcr.io/netryon/backuplint-agent:1.0.0
 ```
 
 Do not pass `--privileged`. Do not mount `/var/run/docker.sock` unless you intentionally enable Compose submit from that container.
@@ -102,4 +126,4 @@ Native and container agents may enroll in the same controller. Presence and audi
 
 ## Upgrades and persistence
 
-Replace the image tag, keep the same `/state` volumes. Destroying the controller volume creates a new fleet CA; agents must re-enroll. Destroying the agent volume loses the private key; re-enroll with a new token.
+Pull the new image tag (or digest), recreate the container, keep the same `/state` volumes. Destroying the controller volume creates a new fleet CA; agents must re-enroll. Destroying the agent volume loses the private key; re-enroll with a new token.
