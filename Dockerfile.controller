@@ -15,7 +15,7 @@ ARG BACKUPLINT_REVISION=unknown
 
 LABEL org.opencontainers.image.title="BackupLint Controller" \
       org.opencontainers.image.description="HTTPS fleet controller (no Docker socket, no Restic)" \
-      org.opencontainers.image.source="https://github.com/Netryon/backuplint" \
+      org.opencontainers.image.source="https://github.com/Netryon/BackupLint" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.version="${BACKUPLINT_VERSION}" \
       org.opencontainers.image.revision="${BACKUPLINT_REVISION}" \

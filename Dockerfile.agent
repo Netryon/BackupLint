@@ -15,7 +15,7 @@ ARG BACKUPLINT_REVISION=unknown
 
 LABEL org.opencontainers.image.title="BackupLint Agent" \
       org.opencontainers.image.description="Outbound fleet agent (CSR enrollment, no Docker socket by default)" \
-      org.opencontainers.image.source="https://github.com/Netryon/backuplint" \
+      org.opencontainers.image.source="https://github.com/Netryon/BackupLint" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.version="${BACKUPLINT_VERSION}" \
       org.opencontainers.image.revision="${BACKUPLINT_REVISION}" \
