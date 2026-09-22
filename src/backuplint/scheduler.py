@@ -6,6 +6,7 @@ backup-truth semantics. Scheduling status is separate from audit PASS/FAIL.
 
 from __future__ import annotations
 
+import json
 import os
 import random
 import signal
@@ -348,17 +349,49 @@ class Scheduler:
             if outcome is not None:
                 self._maybe_submit_fleet(outcome, scanned_at=finished)
                 self._maybe_submit_local_siem(outcome, scanned_at=finished)
+            elif result == "ERROR":
+                self._maybe_submit_fleet_error(detail, scanned_at=finished)
+                self._maybe_submit_local_siem_error(detail, scanned_at=finished)
         finally:
             # Success, FAIL/ERROR, exception, or shutdown mid-flight: clear mark.
             self._running_check = None
 
     def _maybe_submit_fleet(self, outcome: object, *, scanned_at: datetime) -> None:
         """Best-effort submit of local result; never changes backup truth."""
+        from backuplint.reporting import format_audit_json
+
+        findings = getattr(outcome, "findings", [])
+        integrity = getattr(outcome, "integrity", None)
+        restore = getattr(outcome, "restore", None)
+        result_obj = json.loads(
+            format_audit_json(findings, integrity=integrity, restore=restore)
+        )
+        self._submit_fleet_result(result_obj, scanned_at=scanned_at)
+
+    def _maybe_submit_fleet_error(
+        self, detail: str | None, *, scanned_at: datetime
+    ) -> None:
+        from backuplint.engine import classify_engine_exception
+        from backuplint.reporting import format_operational_error_json
+
+        message = (detail or "scheduled check failed").strip()
+        eng_err = classify_engine_exception(ResticError(message))
+        result_obj = json.loads(
+            format_operational_error_json(
+                message=eng_err.message,
+                kind=eng_err.kind.value,
+                engine=eng_err.engine_id,
+            )
+        )
+        self._submit_fleet_result(result_obj, scanned_at=scanned_at)
+
+    def _submit_fleet_result(
+        self, result_obj: dict[str, object], *, scanned_at: datetime
+    ) -> None:
         fleet = self.backup_config.fleet
         if fleet is None:
             return
         try:
-            import json
             import platform as plat
 
             from backuplint import __version__
@@ -369,20 +402,12 @@ class Scheduler:
                 ResultEnvelope,
                 new_submission_id,
             )
-            from backuplint.reporting import format_audit_json
 
             identity = AgentIdentity.load(fleet.identity_dir)
             agent = FleetAgent(
                 controller_url=fleet.controller_url,
                 identity=identity,
                 queue=AgentQueue(fleet.identity_dir / "queue.jsonl"),
-            )
-            # outcome is AuditOutcome
-            findings = getattr(outcome, "findings", [])
-            integrity = getattr(outcome, "integrity", None)
-            restore = getattr(outcome, "restore", None)
-            result_obj = json.loads(
-                format_audit_json(findings, integrity=integrity, restore=restore)
             )
             envelope = ResultEnvelope(
                 agent_id=identity.agent_id,
@@ -413,6 +438,47 @@ class Scheduler:
         feed = LocalSiemFeed.open(state_dir, self.backup_config.siem)
         try:
             feed.submit_outcome(outcome, occurred_at=scanned_at.isoformat())
+            feed.flush()
+        except Exception:  # noqa: BLE001
+            return
+        finally:
+            feed.close()
+
+    def _maybe_submit_local_siem_error(
+        self, detail: str | None, *, scanned_at: datetime
+    ) -> None:
+        from backuplint.engine import classify_engine_exception
+        from backuplint.reporting import format_operational_error_json
+        from backuplint.siem.event import audit_result_to_siem_event
+        from backuplint.siem.runtime import LocalSiemFeed, should_use_local_siem_feed
+
+        if not should_use_local_siem_feed(
+            self.backup_config.siem,
+            has_fleet=self.backup_config.fleet is not None,
+        ):
+            return
+        message = (detail or "scheduled check failed").strip()
+        eng_err = classify_engine_exception(ResticError(message))
+        result_obj = json.loads(
+            format_operational_error_json(
+                message=eng_err.message,
+                kind=eng_err.kind.value,
+                engine=eng_err.engine_id,
+            )
+        )
+        state_dir = resolve_state_dir(self.schedule)
+        feed = LocalSiemFeed.open(state_dir, self.backup_config.siem)
+        try:
+            if feed.exporter is not None:
+                when = scanned_at.isoformat()
+                event = audit_result_to_siem_event(
+                    result_obj,
+                    occurred_at=when,
+                    source_role="standalone",
+                    received_at=when,
+                )
+                if event is not None:
+                    feed.exporter.submit(event)
             feed.flush()
         except Exception:  # noqa: BLE001
             return

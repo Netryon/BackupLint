@@ -162,6 +162,25 @@ def test_check_locked_sanitizes_host_identity(tmp_path: Path) -> None:
     assert "sysadmin" not in result.message
 
 
+def test_check_empty_output_is_error_not_failed(tmp_path: Path) -> None:
+    password_file = tmp_path / "pass"
+    password_file.write_text("x", encoding="utf-8")
+    password_file.chmod(0o600)
+    with patch("backuplint.restic.shutil.which", return_value="/usr/bin/restic"):
+        with patch("backuplint.restic.run_argv") as run:
+            run.return_value.returncode = 1
+            run.return_value.stdout = ""
+            run.return_value.stderr = ""
+            result = check_repository_integrity(
+                mode=IntegrityMode.DEEP,
+                repository=str(tmp_path / "repo"),
+                password_file=password_file,
+            )
+    assert result.status is IntegrityStatus.ERROR
+    assert result.status is not IntegrityStatus.PASSED
+    assert "locked" in result.message
+
+
 def test_check_timeout_raises(tmp_path: Path) -> None:
     password_file = tmp_path / "pass"
     password_file.write_text("x", encoding="utf-8")

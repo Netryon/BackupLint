@@ -16,6 +16,7 @@ from backuplint.config import IntegrityMode
 from backuplint.paths import find_covering_backup_path
 from backuplint.process import TimeoutExpired, run_argv
 from backuplint.restic_errors import (
+    ResticOperationalKind,
     classify_integrity_operational,
     classify_list_snapshots_failure,
     integrity_error_message,
@@ -90,6 +91,10 @@ def _parse_time(raw: object) -> datetime | None:
 
 def parse_snapshots_json(payload: str) -> list[ResticSnapshot]:
     """Parse `restic snapshots --json` output."""
+    if not (payload or "").strip():
+        raise ResticError(
+            "Restic returned empty snapshot JSON (command failed or produced no output)."
+        )
     try:
         data = json.loads(payload)
     except json.JSONDecodeError as exc:
@@ -281,7 +286,15 @@ def _classify_integrity_failure(
     duration_seconds: float,
 ) -> IntegrityCheckResult:
     """Map restic check failures to FAILED (corruption) or ERROR (operational)."""
-    detail = _sanitize(output or "unknown error", secrets)
+    raw = output or ""
+    if returncode != 0 and not raw.strip():
+        return IntegrityCheckResult(
+            mode=mode,
+            status=IntegrityStatus.ERROR,
+            duration_seconds=duration_seconds,
+            message=integrity_error_message(ResticOperationalKind.LOCKED),
+        )
+    detail = _sanitize(raw or "unknown error", secrets)
     kind = classify_integrity_operational(returncode=returncode, output=detail)
     if kind is not None:
         return IntegrityCheckResult(

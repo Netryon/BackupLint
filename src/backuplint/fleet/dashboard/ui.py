@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import html
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 
 # Official BackupLint matched-state mark — inline SVG (CSP: default-src 'none'
@@ -26,6 +26,41 @@ def _logo_img(*, css_class: str = "logo-mark", size: int = 32) -> str:
 
 def _e(value: object) -> str:
     return html.escape("" if value is None else str(value), quote=True)
+
+
+def _service_href(
+    agent_id: object,
+    project: object,
+    service: object,
+    *,
+    mount: object | None = None,
+) -> str:
+    """Project-aware service URL; falls back to the agent page."""
+    aid = quote(str(agent_id or ""), safe="")
+    proj = quote(str(project or ""), safe="")
+    name = quote(str(service or ""), safe="")
+    if aid and proj and name:
+        path = f"/dashboard/agents/{aid}/services/{proj}/{name}"
+    elif aid and name:
+        path = f"/dashboard/agents/{aid}/services/{name}"
+    elif aid:
+        path = f"/dashboard/agents/{aid}"
+    else:
+        return "#"
+    if mount:
+        path += f"?mount={quote(str(mount), safe='')}"
+    return path
+
+
+def _state_pill(value: object) -> str:
+    raw = "" if value is None else str(value)
+    if not raw or raw == "None":
+        label = "—"
+        cls = ""
+    else:
+        label = raw.replace("_", " ")
+        cls = raw.replace(" ", "_")
+    return f"<span class='pill {_e(cls)}'>{_e(label)}</span>"
 
 
 def _css() -> str:
@@ -243,6 +278,7 @@ main {
 .time-range { margin: .5rem 0 1rem; }
 .time-range select { min-width: 8rem; }
 .alerts-table td { font-size: .85rem; }
+tr.mount-focus td { background: var(--bad-bg); box-shadow: inset 3px 0 0 var(--bad); }
 .donut-wrap {
   display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
   min-height: 140px;
@@ -298,6 +334,9 @@ th {
 }
 .pill.offline, .pill.FAIL, .pill.ERROR, .pill.QUEUE_OVERFLOW {
   color: var(--bad); background: var(--bad-bg); border-color: rgba(229,83,83,.28);
+}
+.pill.UNKNOWN, .pill.NOT_RUN, .pill.NOT_APPLICABLE {
+  color: var(--muted); background: var(--surface-2); border-color: var(--line);
 }
 form.filters {
   display: flex; flex-wrap: wrap; gap: .5rem;
@@ -567,8 +606,14 @@ def _recent_alerts_panel(alerts: dict[str, Any]) -> str:
         elif kind == "PROTOCOL":
             pill_cls = "WARN"
         aid = item.get("agent_id")
+        href = _service_href(
+            aid,
+            item.get("project"),
+            item.get("service"),
+            mount=item.get("mount"),
+        )
         agent_cell = (
-            f"<a href='/dashboard/agents/{_e(aid)}'>{_e(aid)}</a>"
+            f"<a href='{href}'>{_e(aid)}</a>"
             if aid
             else "—"
         )
@@ -577,8 +622,8 @@ def _recent_alerts_panel(alerts: dict[str, Any]) -> str:
             f"<td>{_e(item.get('occurred_at'))}</td>"
             f"<td>{agent_cell}</td>"
             f"<td><span class='pill {_e(pill_cls)}'>{_e(kind)}</span></td>"
-            f"<td>{_e(item.get('event_type'))}</td>"
-            f"<td>{_e(item.get('summary'))}</td>"
+            f"<td>{_e(item.get('service') or item.get('event_type') or '')}</td>"
+            f"<td>{_e(item.get('mount') or '')} {_e(item.get('summary'))}</td>"
             "</tr>"
         )
     body = (
@@ -730,8 +775,10 @@ def page_fleet(
   <div class="card tone-bad"><div class="n">{_e(audit.get('ERROR', 0))}</div><div class="l">Audit ERROR</div></div>
   <div class="card"><div class="n">{_e(totals.get('data_gap_or_overflow_agents', 0))}</div><div class="l">DATA_GAP / overflow</div></div>
   <div class="card"><div class="n">{_e(totals.get('protocol_compatibility_warnings', 0))}</div><div class="l">Protocol warnings</div></div>
+  <div class="card"><div class="n">{_e(totals.get('persistent_services', 0))}</div><div class="l">Persistent services</div></div>
+  <div class="card"><div class="n">{_e(totals.get('assurance_alerts', 0))}</div><div class="l">Service/mount alerts</div></div>
 </div>
-<p class="muted">Online/stale/offline is heartbeat freshness — separate from current audit health.</p>
+<p class="muted">Online/stale/offline is heartbeat freshness — separate from current audit health. Integrity and restore are repository-scoped.</p>
 <div class="charts">
 {_audit_bars(audit if isinstance(audit, dict) else {})}
 {_presence_donut(online, stale, offline, agent_total)}
@@ -770,25 +817,29 @@ def page_fleet(
         aid = item.get("agent_id")
         gap = "DATA_GAP" if item.get("has_data_gap") else ""
         warn = "proto!" if item.get("protocol_warning") else ""
-        caps = item.get("capability_summary") or {}
+        a = item.get("assurance") or {}
         rows.append(
             "<tr>"
             f"<td><a href='/dashboard/agents/{_e(aid)}'>{_e(item.get('label') or aid)}</a>"
             f"<div class='muted'>{_e(aid)} · {_e(item.get('hostname'))}</div></td>"
-            f"<td><span class='pill { _e(item.get('presence')) }'>{_e(item.get('presence'))}</span></td>"
-            f"<td><span class='pill { _e(item.get('current_audit_status') or '') }'>{_e(item.get('current_audit_status') or '—')}</span></td>"
+            f"<td>{_state_pill(item.get('presence'))}</td>"
+            f"<td>{_state_pill(item.get('current_audit_status'))}</td>"
+            f"<td>{_e(a.get('persistent_service_count', 0))} persistent"
+            f"<div class='muted'>{_e(a.get('healthy_count', 0))} healthy / "
+            f"{_e(a.get('warning_count', 0))} warn / "
+            f"{_e(a.get('failing_count', 0))} fail / "
+            f"{_e(a.get('error_count', 0))} error</div></td>"
+            f"<td>{_e(a.get('alert_count', 0))}</td>"
             f"<td>{_e(item.get('current_audit_occurred_at') or '—')}</td>"
             f"<td>{_e(item.get('last_heartbeat') or '—')}</td>"
-            f"<td>{_e(item.get('software_version') or '—')}</td>"
-            f"<td>{_e(item.get('protocol_version'))} {_e(warn)}</td>"
-            f"<td>{_e(caps.get('available_count', 0))} avail {_e(gap)}</td>"
+            f"<td>{_e(item.get('software_version') or '—')} · proto {_e(item.get('protocol_version'))} {_e(warn)} {_e(gap)}</td>"
             "</tr>"
         )
     table = (
         "<div class='panel'><div class='panel-head'><h2>Agents</h2></div>"
         "<div class='table-wrap'><table><thead><tr>"
-        "<th>Agent</th><th>Online</th><th>Current audit</th><th>Last audit</th>"
-        "<th>Last heartbeat</th><th>Software</th><th>Protocol</th><th>Capabilities</th>"
+        "<th>Agent</th><th>Presence</th><th>Audit</th><th>Persistent services</th>"
+        "<th>Alerts</th><th>Last audit</th><th>Last heartbeat</th><th>Software</th>"
         "</tr></thead><tbody>"
         + ("".join(rows) if rows else "<tr><td colspan='8' class='muted'>No agents</td></tr>")
         + "</tbody></table></div></div>"
@@ -829,6 +880,7 @@ def page_fleet(
 def page_agent(detail: dict[str, Any], *, csrf: str) -> str:
     ident = detail.get("identity") or {}
     audit = detail.get("current_audit") or {}
+    assurance = detail.get("assurance") or {}
     caps = detail.get("capability_summary") or {}
     families = caps.get("families") or {}
     cap_rows = "".join(
@@ -846,26 +898,115 @@ def page_agent(detail: dict[str, Any], *, csrf: str) -> str:
         "<tr>"
         f"<td>{_e(ev.get('occurred_at'))}</td>"
         f"<td>{_e(ev.get('event_type'))}</td>"
-        f"<td><span class='pill {_e(ev.get('status'))}'>{_e(ev.get('status'))}</span></td>"
+        f"<td>{_state_pill(ev.get('status'))}</td>"
         f"<td>{_e(ev.get('summary'))}</td>"
         f"<td>{_e(ev.get('received_at'))}</td>"
         "</tr>"
         for ev in (detail.get("recent_history") or [])
     )
+    aid = str(ident.get("agent_id") or "")
+    svc_rows = []
+    for project in assurance.get("projects") or []:
+        if not isinstance(project, dict):
+            continue
+        for service in project.get("services") or []:
+            if not isinstance(service, dict):
+                continue
+            name = str(service.get("service") or "")
+            href = _service_href(aid, project.get("name"), name)
+            persist = ", ".join(
+                str(m.get("host_path") or m.get("target") or "")
+                for m in (service.get("mounts") or [])
+                if isinstance(m, dict) and m.get("persistent")
+            ) or "none"
+            svc_rows.append(
+                "<tr>"
+                f"<td><a href='{href}'>{_e(name)}</a>"
+                f"<div class='muted'>{_e(project.get('name'))}</div></td>"
+                f"<td>{_e(persist)}</td>"
+                f"<td>{_state_pill(service.get('coverage'))}</td>"
+                f"<td>{_state_pill(service.get('freshness'))}</td>"
+                f"<td>{_state_pill(service.get('integrity'))}</td>"
+                f"<td>{_state_pill(service.get('restore'))}</td>"
+                f"<td>{_state_pill(service.get('overall'))}</td>"
+                "</tr>"
+            )
+    empty = assurance.get("empty_reason")
+    if not svc_rows:
+        reason = empty or "No Compose services in the latest audit payload"
+        svc_body = f"<tr><td colspan='7' class='muted'>{_e(reason)}</td></tr>"
+    else:
+        svc_body = "".join(svc_rows)
+    alert_rows = "".join(
+        "<tr>"
+        f"<td>{_e(al.get('occurred_at'))}</td>"
+        f"<td>{_e(al.get('project'))}</td>"
+        f"<td><a href='{_service_href(aid, al.get('project'), al.get('service'), mount=al.get('mount'))}'>{_e(al.get('service'))}</a></td>"
+        f"<td>{_e(al.get('mount'))}</td>"
+        f"<td>{_e(al.get('check'))}</td>"
+        f"<td>{_state_pill(al.get('state'))}</td>"
+        f"<td>{_e(al.get('reason'))}</td>"
+        "</tr>"
+        for al in (assurance.get("alerts") or [])
+        if isinstance(al, dict)
+    )
+    trans = "".join(
+        "<tr>"
+        f"<td>{_e(ch.get('occurred_at'))}</td>"
+        f"<td>{_e(ch.get('object'))}</td>"
+        f"<td>{_e(ch.get('service') or ch.get('check'))}</td>"
+        f"<td>{_state_pill(ch.get('from'))} → {_state_pill(ch.get('to'))}</td>"
+        "</tr>"
+        for ch in (detail.get("assurance_history") or [])
+        if isinstance(ch, dict)
+    )
+    policy = detail.get("policy") or {}
+    policy_note = "No effective policy recorded"
+    if isinstance(policy, dict) and policy:
+        policy_note = (
+            f"revision {_e(policy.get('revision') or policy.get('policy_revision') or '—')} · "
+            f"{_e(policy.get('status') or policy.get('drift_status') or json_safe_policy(policy))}"
+        )
+    integ = assurance.get("integrity") or {}
+    restore = assurance.get("restore_verification") or {}
+    repo = assurance.get("repository") or {}
     title = str(ident.get("label") or ident.get("agent_id") or "Agent")
     body = f"""
 <h1>{_e(ident.get('label') or ident.get('agent_id'))}</h1>
 <p class="muted">{_e(ident.get('agent_id'))} · host {_e(ident.get('hostname'))} · registry {_e(ident.get('registry_status'))}</p>
 <div class="cards">
-  <div class="card"><div class="n"><span class="pill {_e(detail.get('presence'))}">{_e(detail.get('presence'))}</span></div><div class="l">Presence</div></div>
-  <div class="card"><div class="n"><span class="pill {_e(audit.get('status') or '')}">{_e(audit.get('status') or '—')}</span></div><div class="l">Current audit</div></div>
-  <div class="card"><div class="n">{_e(detail.get('software_version') or '—')}</div><div class="l">Software</div></div>
-  <div class="card"><div class="n">{_e(detail.get('protocol_version'))}</div><div class="l">Protocol</div></div>
+  <div class="card"><div class="n">{_state_pill(detail.get('presence'))}</div><div class="l">Presence</div></div>
+  <div class="card"><div class="n">{_state_pill(audit.get('status'))}</div><div class="l">Current audit</div></div>
+  <div class="card"><div class="n">{_e(assurance.get('persistent_service_count', 0))}</div><div class="l">Persistent services</div></div>
+  <div class="card"><div class="n">{_e(len(assurance.get('alerts') or []))}</div><div class="l">Active alerts</div></div>
 </div>
 <div class="panel" style="margin-top:.85rem">
 <p>Last heartbeat: {_e(detail.get('last_heartbeat') or 'never')} · Last received: {_e(detail.get('last_received_at') or '—')}</p>
 <p>Current audit occurred_at: {_e(audit.get('occurred_at') or '—')} (independent of presence)</p>
+<p>Policy: {policy_note}</p>
+<p class="muted">{_e(repo.get('note'))}</p>
 </div>
+<h2>Service assurance</h2>
+<p class="muted">Coverage is per mount. Integrity and restore are repository-scoped — NOT RUN means the check was not performed. PASS is never shown for a check that did not run.</p>
+<div class="panel"><div class="table-wrap"><table><thead><tr>
+<th>Service</th><th>Persistent data</th><th>Coverage</th><th>Freshness</th><th>Integrity</th><th>Restore</th><th>Overall</th>
+</tr></thead><tbody>{svc_body}</tbody></table></div></div>
+<h2>Repository integrity / restore</h2>
+<div class="cards">
+  <div class="card"><div class="n">{_state_pill(integ.get('state'))}</div><div class="l">Integrity ({_e(integ.get('mode') or 'not run')})</div></div>
+  <div class="card"><div class="n">{_state_pill(restore.get('state'))}</div><div class="l">Restore verification</div></div>
+  <div class="card"><div class="n">{_state_pill(repo.get('state'))}</div><div class="l">Repository</div></div>
+</div>
+<p class="muted">{_e(integ.get('message') or '')} {_e(restore.get('message') or '')}</p>
+<h2>Attributed alerts</h2>
+<div class="panel"><div class="table-wrap"><table><thead><tr>
+<th>When</th><th>Project</th><th>Service</th><th>Mount</th><th>Check</th><th>State</th><th>Reason</th>
+</tr></thead><tbody>{alert_rows or "<tr><td colspan='7' class='muted'>No object-level alerts</td></tr>"}</tbody></table></div></div>
+<h2>Recent state changes</h2>
+<p class="muted">Derived from stored audit.completed payloads only. Presence and policy transitions are not invented.</p>
+<div class="panel"><div class="table-wrap"><table><thead><tr>
+<th>When</th><th>Object</th><th>Service / check</th><th>Change</th>
+</tr></thead><tbody>{trans or "<tr><td colspan='4' class='muted'>No persisted transitions in the last 25 audits</td></tr>"}</tbody></table></div></div>
 <h2>Latest by check type</h2>
 <div class="panel"><div class="table-wrap"><table><thead><tr><th>Check</th><th>Status</th><th>Occurred</th><th>Received</th><th>Summary</th></tr></thead>
 <tbody>{_latest_check_rows(detail.get('latest_by_check_type') or {})}</tbody></table></div></div>
@@ -878,6 +1019,83 @@ def page_agent(detail: dict[str, Any], *, csrf: str) -> str:
 <tbody>{hist or "<tr><td colspan='5' class='muted'>No events</td></tr>"}</tbody></table></div></div>
 """
     return _layout(title, body, csrf=csrf, active="fleet")
+
+
+def json_safe_policy(policy: dict[str, Any]) -> str:
+    keys = ("name", "id", "assignment")
+    parts = [str(policy[k]) for k in keys if policy.get(k)]
+    return " · ".join(parts)[:240] if parts else "assigned"
+
+
+def page_service(
+    detail: dict[str, Any],
+    *,
+    csrf: str,
+    highlight_mount: str | None = None,
+) -> str:
+    ident = detail.get("identity") or {}
+    service = detail.get("service") or {}
+    aid = str(ident.get("agent_id") or detail.get("agent_id") or "")
+    name = str(service.get("service") or "service")
+    want = (highlight_mount or "").strip()
+    mounts = []
+    for mount in service.get("mounts") or []:
+        if not isinstance(mount, dict):
+            continue
+        host = str(mount.get("host_path") or "")
+        mid = str(mount.get("id") or "")
+        target = str(mount.get("target") or "")
+        focus = bool(want) and want in {host, mid, target}
+        row_id = quote(mid or host or target, safe="")
+        cls = " class='mount-focus'" if focus else ""
+        mounts.append(
+            f"<tr id='mount-{_e(row_id)}'{cls}>"
+            f"<td>{_e(mount.get('host_path') or mount.get('id'))}</td>"
+            f"<td>{_e(mount.get('target'))}</td>"
+            f"<td>{_e(mount.get('type'))} / {_e(mount.get('storage_class') or '—')}</td>"
+            f"<td>{_e('yes' if mount.get('expected_backed_up') else 'no')}</td>"
+            f"<td>{_e(mount.get('covered_by') or '—')}</td>"
+            f"<td>{_state_pill(mount.get('coverage'))}</td>"
+            f"<td>{_state_pill(mount.get('freshness'))}"
+            f"<div class='muted'>{_e(mount.get('last_snapshot') or mount.get('freshness_detail') or '')}</div></td>"
+            f"<td>{_state_pill(mount.get('integrity'))} <span class='muted'>({_e(mount.get('integrity_scope'))})</span></td>"
+            f"<td>{_state_pill(mount.get('restore'))} <span class='muted'>({_e(mount.get('restore_scope'))})</span></td>"
+            f"<td>{_e(mount.get('detail'))}</td>"
+            "</tr>"
+        )
+    hist = "".join(
+        "<tr>"
+        f"<td>{_e(ch.get('occurred_at'))}</td>"
+        f"<td>{_state_pill(ch.get('from'))} → {_state_pill(ch.get('to'))}</td>"
+        "</tr>"
+        for ch in (detail.get("history") or [])
+        if isinstance(ch, dict)
+    )
+    integ = detail.get("integrity") or {}
+    restore = detail.get("restore_verification") or {}
+    body = f"""
+<p class="muted"><a href="/dashboard/agents/{_e(aid)}">← {_e(aid)}</a></p>
+<h1>{_e(name)}</h1>
+<p class="muted">Compose project {_e(service.get('project'))} · image {_e(service.get('image') or 'not in audit payload')}</p>
+<div class="cards">
+  <div class="card"><div class="n">{_state_pill(service.get('coverage'))}</div><div class="l">Coverage</div></div>
+  <div class="card"><div class="n">{_state_pill(service.get('freshness'))}</div><div class="l">Freshness</div></div>
+  <div class="card"><div class="n">{_state_pill(service.get('integrity'))}</div><div class="l">Integrity (repository)</div></div>
+  <div class="card"><div class="n">{_state_pill(service.get('restore'))}</div><div class="l">Restore (repository)</div></div>
+  <div class="card"><div class="n">{_state_pill(service.get('overall'))}</div><div class="l">Overall</div></div>
+</div>
+<p class="muted">{_e(integ.get('message') or '')} {_e(restore.get('message') or restore.get('snapshot_id') or '')}</p>
+<h2>Mounts and volumes</h2>
+<p class="muted">Each persistent location is listed separately. Integrity/restore are not per-mount unless a finding named the path.</p>
+<div class="panel"><div class="table-wrap"><table><thead><tr>
+<th>Host path / volume</th><th>Target</th><th>Type</th><th>Expected backup</th>
+<th>Covered by</th><th>Coverage</th><th>Freshness</th><th>Integrity</th><th>Restore</th><th>Reason</th>
+</tr></thead><tbody>{"".join(mounts) or "<tr><td colspan='10' class='muted'>No mounts recorded</td></tr>"}</tbody></table></div></div>
+<h2>Recent service state changes</h2>
+<div class="panel"><div class="table-wrap"><table><thead><tr><th>When</th><th>Change</th></tr></thead>
+<tbody>{hist or "<tr><td colspan='2' class='muted'>No persisted transitions for this service</td></tr>"}</tbody></table></div></div>
+"""
+    return _layout(name, body, csrf=csrf, active="fleet")
 
 
 def _latest_check_rows(latest: dict[str, Any]) -> str:

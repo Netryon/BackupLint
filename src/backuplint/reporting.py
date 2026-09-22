@@ -330,6 +330,20 @@ def format_audit_json(
                 "detail": f.detail,
                 "covered_by": f.covered_by,
                 "critical": f.is_critical,
+                "project": f.project,
+                "image": f.image,
+                "snapshot_time": (
+                    (
+                        f.snapshot_time
+                        if f.snapshot_time.tzinfo is not None
+                        else f.snapshot_time.replace(tzinfo=UTC)
+                    )
+                    .astimezone(UTC)
+                    .isoformat()
+                    .replace("+00:00", "Z")
+                    if f.snapshot_time is not None
+                    else None
+                ),
             }
             for f in findings
         ],

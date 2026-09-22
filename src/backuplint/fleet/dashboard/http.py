@@ -6,7 +6,7 @@ import json
 import re
 from dataclasses import dataclass
 from http.cookies import SimpleCookie
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, unquote
 
 from backuplint.fleet.dashboard import ui
 from backuplint.fleet.dashboard.auth import (
@@ -18,7 +18,15 @@ from backuplint.fleet.dashboard.auth import (
 from backuplint.fleet.dashboard.query import DashboardQueryService
 
 _AGENT_PATH = re.compile(r"^/v1/dashboard/agents/([^/]+)$")
+_AGENT_SERVICE_NESTED = re.compile(
+    r"^/v1/dashboard/agents/([^/]+)/services/([^/]+)/([^/]+)$"
+)
+_AGENT_SERVICE_PATH = re.compile(r"^/v1/dashboard/agents/([^/]+)/services/([^/]+)$")
 _UI_AGENT_PATH = re.compile(r"^/dashboard/agents/([^/]+)$")
+_UI_AGENT_SERVICE_NESTED = re.compile(
+    r"^/dashboard/agents/([^/]+)/services/([^/]+)/([^/]+)$"
+)
+_UI_AGENT_SERVICE_PATH = re.compile(r"^/dashboard/agents/([^/]+)/services/([^/]+)$")
 
 MAX_QUERY_LEN = 256
 MAX_BODY = 4096
@@ -275,6 +283,26 @@ class DashboardHttp:
                     has_data_gap=_q_bool(qs, "has_data_gap"),
                 ),
             )
+        nested = _AGENT_SERVICE_NESTED.match(path)
+        if nested:
+            detail = self.query.agent_service(
+                unquote(nested.group(1)),
+                unquote(nested.group(3)),
+                project=unquote(nested.group(2)),
+            )
+            if detail is None:
+                return _json(404, {"error": "service not found"})
+            return _json(200, detail)
+        svc = _AGENT_SERVICE_PATH.match(path)
+        if svc:
+            detail = self.query.agent_service(
+                unquote(svc.group(1)),
+                unquote(svc.group(2)),
+                project=_q_get(qs, "project"),
+            )
+            if detail is None:
+                return _json(404, {"error": "service not found"})
+            return _json(200, detail)
         m = _AGENT_PATH.match(path)
         if m:
             detail = self.query.agent_detail(m.group(1))
@@ -357,6 +385,46 @@ class DashboardHttp:
                     window=window,
                     csrf=csrf,
                     qs=qs,
+                ),
+            )
+        nested = _UI_AGENT_SERVICE_NESTED.match(path)
+        if nested:
+            detail = self.query.agent_service(
+                unquote(nested.group(1)),
+                unquote(nested.group(3)),
+                project=unquote(nested.group(2)),
+            )
+            if detail is None:
+                return _html(
+                    404,
+                    ui.page_error("Service not found", unquote(nested.group(3))),
+                )
+            return _html(
+                200,
+                ui.page_service(
+                    detail,
+                    csrf=csrf,
+                    highlight_mount=_q_get(qs, "mount"),
+                ),
+            )
+        svc = _UI_AGENT_SERVICE_PATH.match(path)
+        if svc:
+            detail = self.query.agent_service(
+                unquote(svc.group(1)),
+                unquote(svc.group(2)),
+                project=_q_get(qs, "project"),
+            )
+            if detail is None:
+                return _html(
+                    404,
+                    ui.page_error("Service not found", unquote(svc.group(2))),
+                )
+            return _html(
+                200,
+                ui.page_service(
+                    detail,
+                    csrf=csrf,
+                    highlight_mount=_q_get(qs, "mount"),
                 ),
             )
         m = _UI_AGENT_PATH.match(path)

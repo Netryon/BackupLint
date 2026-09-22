@@ -53,8 +53,12 @@ def classify_list_snapshots_failure(output: str) -> ResticOperationalKind | None
         or "is not a repository" in lower
     ):
         return ResticOperationalKind.NOT_FOUND
+    if "already locked" in lower or "unable to create lock" in lower:
+        return ResticOperationalKind.LOCKED
     if _has_any(lower, _NETWORK_PHRASES):
         return ResticOperationalKind.NETWORK
+    if not lower.strip():
+        return ResticOperationalKind.LOCKED
     return None
 
 
@@ -65,6 +69,8 @@ def classify_integrity_operational(
 ) -> ResticOperationalKind | None:
     """Operational kinds for ``restic check`` failures (historical rules)."""
     lower = (output or "").lower()
+    if returncode != 0 and not lower.strip():
+        return ResticOperationalKind.LOCKED
     if returncode == 12 or (
         "wrong password" in lower
         or "authentication failed" in lower
@@ -129,6 +135,8 @@ def list_snapshots_error_message(kind: ResticOperationalKind, detail: str) -> st
         return (
             "Unable to open Restic repository (backend unavailable or network failure)."
         )
+    if kind is ResticOperationalKind.LOCKED:
+        return "Unable to open Restic repository (repository is locked)."
     return f"Restic snapshot listing failed:\n{detail}"
 
 

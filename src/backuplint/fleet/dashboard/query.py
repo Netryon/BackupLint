@@ -12,6 +12,12 @@ from backuplint.fleet.compat import (
     MIN_SUPPORTED_PROTOCOL_VERSION,
 )
 from backuplint.fleet.controller_store import ControllerStore
+from backuplint.fleet.dashboard.assurance import (
+    assurance_from_event,
+    empty_assurance,
+    project_assurance,
+    service_from_assurance,
+)
 from backuplint.fleet.dashboard.config import DashboardConfig
 from backuplint.fleet.presence import OFFLINE, ONLINE, STALE, classify_presence
 from backuplint.fleet.queue_policy import DATA_GAP_RESULT_MARKER, QUEUE_OVERFLOW_STATUS
@@ -141,6 +147,30 @@ def _safe_payload_summary(payload_json: str) -> str:
 
 def _like_escape(value: str) -> str:
     return value.replace("\\", "").replace("%", "").replace("_", "").strip()
+
+
+def _payload_dict(payload_json: object) -> dict[str, Any]:
+    if not payload_json:
+        return {}
+    if isinstance(payload_json, dict):
+        return payload_json
+    try:
+        data = json.loads(str(payload_json))
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _assurance_summary(assurance: dict[str, object]) -> dict[str, object]:
+    return {
+        "persistent_service_count": assurance.get("persistent_service_count", 0),
+        "healthy_count": assurance.get("healthy_count", 0),
+        "warning_count": assurance.get("warning_count", 0),
+        "failing_count": assurance.get("failing_count", 0),
+        "error_count": assurance.get("error_count", 0),
+        "alert_count": len(list(assurance.get("alerts") or [])),
+        "empty_reason": assurance.get("empty_reason"),
+    }
 
 
 def _public_event(event: dict[str, object] | None) -> dict[str, object] | None:
@@ -289,6 +319,38 @@ class DashboardQueryService:
                     "has_data_gap": _event_has_data_gap(status, payload_json),
                 }
             )
+            if str(row[2]) == EventType.AUDIT_COMPLETED.value and status in ALERT_STATUSES:
+                assurance = project_assurance(
+                    _payload_dict(payload_json),
+                    agent_id=str(row[1]),
+                    occurred_at=str(row[4] or "") or None,
+                    audit_status=status,
+                )
+                for alert in (assurance.get("alerts") or [])[:8]:
+                    if not isinstance(alert, dict):
+                        continue
+                    items.append(
+                        {
+                            "alert_kind": str(alert.get("state") or status),
+                            "event_id": row[0],
+                            "agent_id": row[1],
+                            "event_type": row[2],
+                            "status": str(alert.get("state") or status),
+                            "occurred_at": row[4],
+                            "received_at": row[5],
+                            "summary": (
+                                f"{alert.get('check')}: "
+                                f"{alert.get('service') or 'repository'} "
+                                f"{alert.get('mount') or ''} "
+                                f"{alert.get('reason') or ''}"
+                            ).strip()[:240],
+                            "has_data_gap": False,
+                            "project": alert.get("project"),
+                            "service": alert.get("service"),
+                            "mount": alert.get("mount"),
+                            "check": alert.get("check"),
+                        }
+                    )
         proto_rows = self._execute(
             """
             SELECT agent_id, label, protocol_version,
@@ -419,6 +481,23 @@ class DashboardQueryService:
     def fleet_overview(self, *, now: datetime | None = None) -> dict[str, object]:
         agents = self.list_agents(limit=self.config.max_page_size, offset=0, now=now)
         totals = self._presence_and_audit_counts(now=now)
+        persistent = healthy = warning = failing = erroring = alerts = 0
+        for item in agents["items"]:
+            summary = item.get("assurance") if isinstance(item, dict) else None
+            if not isinstance(summary, dict):
+                continue
+            persistent += int(summary.get("persistent_service_count") or 0)
+            healthy += int(summary.get("healthy_count") or 0)
+            warning += int(summary.get("warning_count") or 0)
+            failing += int(summary.get("failing_count") or 0)
+            erroring += int(summary.get("error_count") or 0)
+            alerts += int(summary.get("alert_count") or 0)
+        totals["persistent_services"] = persistent
+        totals["healthy_services"] = healthy
+        totals["warning_services"] = warning
+        totals["failing_services"] = failing
+        totals["error_services"] = erroring
+        totals["assurance_alerts"] = alerts
         return {
             "schema_version": 1,
             "totals": totals,
@@ -584,6 +663,12 @@ class DashboardQueryService:
                          OR e.payload_json LIKE ?
                        )
                      ORDER BY e.received_at DESC LIMIT 1
+                   ),
+                   (
+                     SELECT e.payload_json FROM events e
+                     WHERE e.agent_id = a.agent_id AND e.event_type = ?
+                     ORDER BY e.occurred_at DESC, e.received_at DESC, e.event_id DESC
+                     LIMIT 1
                    )
             FROM agents a
             LEFT JOIN heartbeats h ON h.agent_id = a.agent_id
@@ -598,6 +683,7 @@ class DashboardQueryService:
             QUEUE_OVERFLOW_STATUS,
             f"%{DATA_GAP_RESULT_MARKER}%",
             f"%{QUEUE_OVERFLOW_STATUS}%",
+            EventType.AUDIT_COMPLETED.value,
             *params,
             *audit_params,
             scan_cap,
@@ -651,6 +737,13 @@ class DashboardQueryService:
                 continue
             if has_data_gap is not None and gap != has_data_gap:
                 continue
+            audit_payload = _payload_dict(row[14] if len(row) > 14 else None)
+            assurance = project_assurance(
+                audit_payload,
+                agent_id=str(row[0]),
+                occurred_at=str(row[11] or "") or None,
+                audit_status=str(row[10] or "") or None,
+            )
             items.append(
                 {
                     "agent_id": row[0],
@@ -671,6 +764,7 @@ class DashboardQueryService:
                     },
                     "has_data_gap": gap,
                     "protocol_warning": warning,
+                    "assurance": _assurance_summary(assurance),
                 }
             )
         truncated_scan = len(rows) >= scan_cap
@@ -711,6 +805,11 @@ class DashboardQueryService:
         )
         latest_by_type = self._latest_by_check_type(agent_id)
         gap = any(item.get("has_data_gap") for item in recent["items"])
+        assurance = (
+            assurance_from_event(current_event, agent_id=agent_id)
+            if current_event
+            else empty_assurance(agent_id)
+        )
         return {
             "schema_version": 1,
             "identity": {
@@ -740,7 +839,140 @@ class DashboardQueryService:
             "has_data_gap": gap,
             "recent_history": recent["items"],
             "recent_failures": failures["items"],
+            "assurance": assurance,
+            "assurance_history": self._assurance_transitions(agent_id),
+            "policy": self.agent_policy_effective(agent_id),
         }
+
+    def agent_service(
+        self,
+        agent_id: str,
+        service_name: str,
+        *,
+        project: str | None = None,
+        now: datetime | None = None,
+    ) -> dict[str, object] | None:
+        detail = self.agent_detail(agent_id, now=now)
+        if detail is None:
+            return None
+        assurance = detail.get("assurance")
+        if not isinstance(assurance, dict):
+            return None
+        service = service_from_assurance(
+            assurance, service_name, project=project
+        )
+        if service is None:
+            return None
+        history = [
+            item
+            for item in (detail.get("assurance_history") or [])
+            if isinstance(item, dict)
+            and item.get("service") == service.get("service")
+            and (
+                not project
+                or item.get("project") == project
+                or item.get("object") == "service"
+            )
+        ]
+        return {
+            "schema_version": 1,
+            "agent_id": agent_id,
+            "identity": detail.get("identity"),
+            "presence": detail.get("presence"),
+            "assurance": assurance,
+            "service": service,
+            "history": history[:25],
+            "integrity": assurance.get("integrity"),
+            "restore_verification": assurance.get("restore_verification"),
+            "repository": assurance.get("repository"),
+        }
+
+    def _assurance_transitions(self, agent_id: str) -> list[dict[str, object]]:
+        rows = self._execute(
+            """
+            SELECT occurred_at, status, payload_json
+            FROM events
+            WHERE agent_id = ? AND event_type = ?
+            ORDER BY occurred_at DESC, received_at DESC, event_id DESC
+            LIMIT 25
+            """,
+            (agent_id[:128], EventType.AUDIT_COMPLETED.value),
+        )
+        snapshots: list[tuple[str, str, dict[str, object]]] = []
+        for row in reversed(rows):
+            occurred = str(row[0] or "")
+            status = str(row[1] or "")
+            assurance = project_assurance(
+                _payload_dict(row[2]),
+                agent_id=agent_id,
+                occurred_at=occurred or None,
+                audit_status=status or None,
+            )
+            snapshots.append((occurred, status, assurance))
+        changes: list[dict[str, object]] = []
+        previous: dict[str, str] = {}
+        prev_repo: str | None = None
+        prev_status: str | None = None
+        for occurred, status, assurance in snapshots:
+            if prev_status is not None and prev_status != status:
+                changes.append(
+                    {
+                        "occurred_at": occurred,
+                        "object": "agent",
+                        "service": None,
+                        "mount": None,
+                        "check": "audit",
+                        "from": prev_status,
+                        "to": status,
+                    }
+                )
+            repo = assurance.get("repository") if isinstance(assurance, dict) else None
+            repo_state = (
+                str(repo.get("state")) if isinstance(repo, dict) else None
+            )
+            if prev_repo is not None and repo_state is not None and prev_repo != repo_state:
+                changes.append(
+                    {
+                        "occurred_at": occurred,
+                        "object": "repository",
+                        "service": None,
+                        "mount": None,
+                        "check": "repository",
+                        "from": prev_repo,
+                        "to": repo_state,
+                    }
+                )
+            current_keys: dict[str, str] = {}
+            for project in assurance.get("projects") or []:
+                if not isinstance(project, dict):
+                    continue
+                for service in project.get("services") or []:
+                    if not isinstance(service, dict):
+                        continue
+                    name = str(service.get("service") or "")
+                    proj = str(service.get("project") or project.get("name") or "")
+                    key = f"{proj}::{name}"
+                    overall = str(service.get("overall") or "")
+                    current_keys[key] = overall
+                    prior = previous.get(key)
+                    if prior is not None and prior != overall:
+                        changes.append(
+                            {
+                                "occurred_at": occurred,
+                                "object": "service",
+                                "project": proj,
+                                "service": name,
+                                "mount": None,
+                                "check": "overall",
+                                "from": prior,
+                                "to": overall,
+                            }
+                        )
+            previous = current_keys
+            prev_repo = repo_state
+            prev_status = status
+        changes.reverse()
+        return changes[:25]
 
     def _latest_by_check_type(self, agent_id: str) -> dict[str, object]:
         wanted = (

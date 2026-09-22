@@ -44,9 +44,11 @@ def test_parse_empty_list() -> None:
     assert parse_snapshots_json("[]") == []
 
 
-def test_parse_malformed_json() -> None:
-    with pytest.raises(ResticError, match="malformed JSON"):
-        parse_snapshots_json("{not-json")
+def test_parse_empty_payload_is_error_not_pass() -> None:
+    with pytest.raises(ResticError, match="empty snapshot JSON"):
+        parse_snapshots_json("")
+    with pytest.raises(ResticError, match="empty snapshot JSON"):
+        parse_snapshots_json("   \n")
 
 
 def test_parse_invalid_shape() -> None:

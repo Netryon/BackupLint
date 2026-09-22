@@ -84,6 +84,7 @@ class BackupLintConfig:
     siem: SiemConfig | None = None
     source_file: Path | None = None
     schema_version: int = 1
+    compose_files: tuple[Path, ...] = ()
 
 
 def _parse_backup_paths(raw: object) -> tuple[str, ...]:
@@ -105,6 +106,28 @@ def _parse_backup_paths(raw: object) -> tuple[str, ...]:
         seen.add(value)
         paths.append(value)
     return tuple(paths)
+
+
+def _parse_compose_files(
+    raw: object, *, config_dir: Path | None
+) -> tuple[Path, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ConfigError("'compose_files' must be a list of path strings.")
+    files: list[Path] = []
+    seen: set[Path] = set()
+    for index, item in enumerate(raw):
+        if not isinstance(item, str) or not item.strip():
+            raise ConfigError(
+                f"'compose_files[{index}]' must be a non-empty string path."
+            )
+        path = _resolve_config_path(item, config_dir=config_dir)
+        if path in seen:
+            continue
+        seen.add(path)
+        files.append(path)
+    return tuple(files)
 
 
 def _resolve_config_path(raw: str, *, config_dir: Path | None) -> Path:
@@ -416,6 +439,7 @@ def parse_config_data(
             "fleet",
             "siem",
             "schema_version",
+            "compose_files",
         }
     )
     if unknown:
@@ -450,6 +474,9 @@ def parse_config_data(
         siem=siem,
         source_file=source_file,
         schema_version=schema_version,
+        compose_files=_parse_compose_files(
+            data.get("compose_files"), config_dir=config_dir
+        ),
     )
 
 

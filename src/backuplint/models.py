@@ -42,3 +42,4 @@ class ServiceMounts:
     name: str
     mounts: tuple[Mount, ...]
     image: str | None = None
+    project: str | None = None

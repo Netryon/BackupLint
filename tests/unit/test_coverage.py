@@ -77,6 +77,32 @@ def test_named_volume_coverage_when_mountpoint_known() -> None:
     assert missing.status is CoverageStatus.NOT_PROTECTED
 
 
+def test_localtime_uncovered_is_skipped_not_fail() -> None:
+    finding = evaluate_mount(
+        _bind("homeassistant", "/etc/localtime", "/etc/localtime"),
+        ("/opt/hass/config",),
+    )
+    assert finding.status is CoverageStatus.SKIPPED
+    assert finding.storage_class.value == "infrastructure"
+
+
+def test_localtime_explicitly_listed_is_protected() -> None:
+    finding = evaluate_mount(
+        _bind("homeassistant", "/etc/localtime", "/etc/localtime"),
+        ("/etc/localtime",),
+    )
+    assert finding.status is CoverageStatus.PROTECTED
+
+
+def test_writable_config_bind_still_required() -> None:
+    finding = evaluate_mount(
+        _bind("homeassistant", "/opt/hass/config", "/config"),
+        ("/srv/unrelated",),
+    )
+    assert finding.status is CoverageStatus.NOT_PROTECTED
+    assert finding.is_critical is True
+
+
 def test_named_volume_unsupported_when_missing() -> None:
     volume = Mount(
         service="db",

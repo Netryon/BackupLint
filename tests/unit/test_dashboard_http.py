@@ -76,10 +76,61 @@ def test_dashboard_requires_auth_and_escapes_xss(tmp_path: Path) -> None:
         controller.store.set_agent_label(
             agent.identity.agent_id, '<script>alert(1)</script>'
         )
+        from backuplint.events import new_event_id
+        from backuplint.fleet.protocol import PROTOCOL_VERSION, ResultEnvelope
+
+        controller.store.ingest_result(
+            ResultEnvelope(
+                protocol_version=PROTOCOL_VERSION,
+                agent_id=agent.identity.agent_id,
+                submission_id=new_event_id(),
+                scan_time="2026-09-22T12:00:00+00:00",
+                backuplint_version="1.0.0",
+                platform="test",
+                result={
+                    "result": "FAIL",
+                    "findings": [
+                        {
+                            "service": "svc<script>",
+                            "status": "not protected",
+                            "path": "/var/<img src=x>",
+                            "target": "/data",
+                            "type": "bind",
+                            "storage_class": "persistent",
+                            "detail": "uncovered",
+                            "project": "p<script>",
+                        }
+                    ],
+                },
+            )
+        )
         with opener.open(f"{base}/dashboard/", timeout=5) as resp:  # noqa: S310
             html = resp.read().decode("utf-8")
             assert "<script>alert(1)</script>" not in html
             assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+
+        with opener.open(  # noqa: S310
+            f"{base}/dashboard/agents/{agent.identity.agent_id}", timeout=5
+        ) as resp:
+            agent_html = resp.read().decode("utf-8")
+            assert "<script>" not in agent_html
+            assert "svc&lt;script&gt;" in agent_html
+            assert "/var/&lt;img" in agent_html
+
+        with opener.open(  # noqa: S310
+            f"{base}/v1/dashboard/agents/{agent.identity.agent_id}/services/svc%3Cscript%3E",
+            timeout=5,
+        ) as resp:
+            svc = json.loads(resp.read().decode("utf-8"))
+            assert svc["service"]["service"] == "svc<script>"
+
+        with opener.open(  # noqa: S310
+            f"{base}/v1/dashboard/agents/{agent.identity.agent_id}/services/p%3Cscript%3E/svc%3Cscript%3E",
+            timeout=5,
+        ) as resp:
+            nested = json.loads(resp.read().decode("utf-8"))
+            assert nested["service"]["project"] == "p<script>"
+            assert nested["service"]["service"] == "svc<script>"
 
         # Pagination clamp via API
         with opener.open(  # noqa: S310

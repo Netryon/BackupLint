@@ -53,6 +53,47 @@ def test_unknown_mount_type_stays_unknown() -> None:
     assert classify_mount(mount) is StorageClass.UNKNOWN
 
 
+def test_localtime_bind_is_infrastructure() -> None:
+    mount = _mount(source="/etc/localtime", target="/etc/localtime", read_only=True)
+    assert classify_mount(mount) is StorageClass.INFRASTRUCTURE
+
+
+def test_writable_app_config_is_still_persistent() -> None:
+    assert classify_mount(_mount(source="/opt/hass/config", target="/config")) is (
+        StorageClass.PERSISTENT
+    )
+    assert classify_mount(_mount(source="/etc/myapp/config", target="/etc/myapp")) is (
+        StorageClass.PERSISTENT
+    )
+
+
+def test_named_volume_unaffected_by_infrastructure_rules() -> None:
+    mount = _mount(
+        mtype=MountType.VOLUME,
+        source="vw_data",
+        target="/etc/localtime",
+    )
+    assert classify_mount(mount) is StorageClass.PERSISTENT
+
+
+def test_ro_ca_certs_are_infrastructure() -> None:
+    mount = _mount(
+        source="/etc/ssl/certs",
+        target="/etc/ssl/certs",
+        read_only=True,
+    )
+    assert classify_mount(mount) is StorageClass.INFRASTRUCTURE
+
+
+def test_docker_socket_is_infrastructure() -> None:
+    mount = _mount(
+        source="/var/run/docker.sock",
+        target="/var/run/docker.sock",
+        read_only=True,
+    )
+    assert classify_mount(mount) is StorageClass.INFRASTRUCTURE
+
+
 def test_uncertain_targets_default_persistent_for_bind() -> None:
     # Prefer not silently ignoring uncertain bind mounts.
     assert classify_mount(_mount(target="/opt/custom")) is StorageClass.PERSISTENT

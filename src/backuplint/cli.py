@@ -186,7 +186,23 @@ def scan(
             restore_verify_cli=restore_verify,
         )
     except (ComposeError, ConfigError, ResticError) as exc:
-        typer.echo(exc.message, err=True)
+        if json_output:
+            from backuplint.engine import classify_engine_exception
+            from backuplint.reporting import format_operational_error_json
+
+            eng_err = classify_engine_exception(
+                exc if isinstance(exc, ResticError) else ResticError(exc.message)
+            )
+            typer.echo(
+                format_operational_error_json(
+                    message=eng_err.message,
+                    kind=eng_err.kind.value,
+                    engine=eng_err.engine_id,
+                ),
+                nl=False,
+            )
+        else:
+            typer.echo(exc.message, err=True)
         raise typer.Exit(code=EXIT_ERROR) from exc
 
     if json_output:

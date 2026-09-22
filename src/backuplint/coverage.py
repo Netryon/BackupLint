@@ -38,6 +38,8 @@ class CoverageFinding:
     host_path: str | None = None
     covered_by: str | None = None
     snapshot_time: datetime | None = None
+    project: str | None = None
+    image: str | None = None
 
     @property
     def is_critical(self) -> bool:
@@ -143,13 +145,39 @@ def evaluate_mount(
             covered_by=str(covered_by),
         )
 
+    return _skip_uncovered_infrastructure(
+        CoverageFinding(
+            service=mount.service,
+            mount=mount,
+            storage_class=storage_class,
+            status=CoverageStatus.NOT_PROTECTED,
+            detail=missing_detail,
+            host_path=host_path,
+        )
+    )
+
+
+def _skip_uncovered_infrastructure(finding: CoverageFinding) -> CoverageFinding:
+    """Infrastructure binds are skipped unless a backup path/snapshot covers them."""
+    mount = finding.mount
+    if mount is None or finding.status is not CoverageStatus.NOT_PROTECTED:
+        return finding
+    if classify_mount(mount) is not StorageClass.INFRASTRUCTURE:
+        return finding
     return CoverageFinding(
-        service=mount.service,
-        mount=mount,
-        storage_class=storage_class,
-        status=CoverageStatus.NOT_PROTECTED,
-        detail=missing_detail,
-        host_path=host_path,
+        service=finding.service,
+        mount=finding.mount,
+        storage_class=StorageClass.INFRASTRUCTURE,
+        status=CoverageStatus.SKIPPED,
+        detail=(
+            "infrastructure bind is not application data; "
+            "list it in backup_paths to require coverage"
+        ),
+        host_path=finding.host_path,
+        covered_by=finding.covered_by,
+        snapshot_time=finding.snapshot_time,
+        project=finding.project,
+        image=finding.image,
     )
 
 
@@ -176,24 +204,28 @@ def evaluate_mount_restic(
     storage_class = classify_mount(mount)
 
     if not snapshots:
-        return CoverageFinding(
-            service=mount.service,
-            mount=mount,
-            storage_class=storage_class,
-            status=CoverageStatus.NOT_PROTECTED,
-            detail="no Restic snapshots found",
-            host_path=host_path,
+        return _skip_uncovered_infrastructure(
+            CoverageFinding(
+                service=mount.service,
+                mount=mount,
+                storage_class=storage_class,
+                status=CoverageStatus.NOT_PROTECTED,
+                detail="no Restic snapshots found",
+                host_path=host_path,
+            )
         )
 
     relevant = latest_relevant_snapshot(snapshots, host_path)
     if relevant is None:
-        return CoverageFinding(
-            service=mount.service,
-            mount=mount,
-            storage_class=storage_class,
-            status=CoverageStatus.NOT_PROTECTED,
-            detail="no Restic snapshot covers this path",
-            host_path=host_path,
+        return _skip_uncovered_infrastructure(
+            CoverageFinding(
+                service=mount.service,
+                mount=mount,
+                storage_class=storage_class,
+                status=CoverageStatus.NOT_PROTECTED,
+                detail="no Restic snapshot covers this path",
+                host_path=host_path,
+            )
         )
 
     covered_root = find_covering_backup_path(host_path, relevant.paths)
@@ -260,6 +292,21 @@ def evaluate_mount_restic(
     )
 
 
+def _stamp(finding: CoverageFinding, service: ServiceMounts) -> CoverageFinding:
+    return CoverageFinding(
+        service=finding.service,
+        mount=finding.mount,
+        storage_class=finding.storage_class,
+        status=finding.status,
+        detail=finding.detail,
+        host_path=finding.host_path,
+        covered_by=finding.covered_by,
+        snapshot_time=finding.snapshot_time,
+        project=service.project,
+        image=service.image,
+    )
+
+
 def evaluate_coverage(
     services: list[ServiceMounts],
     backup_paths: tuple[str, ...],
@@ -272,22 +319,28 @@ def evaluate_coverage(
     for service in services:
         for mount in service.mounts:
             findings.append(
-                evaluate_mount(
-                    mount,
-                    backup_paths,
-                    covered_detail=covered_detail,
-                    missing_detail=missing_detail,
+                _stamp(
+                    evaluate_mount(
+                        mount,
+                        backup_paths,
+                        covered_detail=covered_detail,
+                        missing_detail=missing_detail,
+                    ),
+                    service,
                 )
             )
         if is_database_image(service.image):
             findings.append(
-                CoverageFinding(
-                    service=service.name,
-                    mount=None,
-                    storage_class=None,
-                    status=CoverageStatus.UNSUPPORTED,
-                    detail=database_warning_message(service.image or ""),
-                    host_path="database detected",
+                _stamp(
+                    CoverageFinding(
+                        service=service.name,
+                        mount=None,
+                        storage_class=None,
+                        status=CoverageStatus.UNSUPPORTED,
+                        detail=database_warning_message(service.image or ""),
+                        host_path="database detected",
+                    ),
+                    service,
                 )
             )
     return findings
@@ -305,22 +358,28 @@ def evaluate_coverage_restic(
     for service in services:
         for mount in service.mounts:
             findings.append(
-                evaluate_mount_restic(
-                    mount,
-                    snapshots,
-                    max_backup_age=max_backup_age,
-                    now=now,
+                _stamp(
+                    evaluate_mount_restic(
+                        mount,
+                        snapshots,
+                        max_backup_age=max_backup_age,
+                        now=now,
+                    ),
+                    service,
                 )
             )
         if is_database_image(service.image):
             findings.append(
-                CoverageFinding(
-                    service=service.name,
-                    mount=None,
-                    storage_class=None,
-                    status=CoverageStatus.UNSUPPORTED,
-                    detail=database_warning_message(service.image or ""),
-                    host_path="database detected",
+                _stamp(
+                    CoverageFinding(
+                        service=service.name,
+                        mount=None,
+                        storage_class=None,
+                        status=CoverageStatus.UNSUPPORTED,
+                        detail=database_warning_message(service.image or ""),
+                        host_path="database detected",
+                    ),
+                    service,
                 )
             )
     return findings

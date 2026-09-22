@@ -150,8 +150,10 @@ def run_audit(
     resolved_config = (
         config_path if config_path is not None else default_config_path(compose_file)
     )
-    services = discover_mounts(compose_file)
     backup_config = load_config(resolved_config)
+    services = discover_mounts(
+        compose_file, extra_files=backup_config.compose_files
+    )
     return run_audit_with_config(
         services=services,
         backup_config=backup_config,

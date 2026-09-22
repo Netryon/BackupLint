@@ -28,12 +28,16 @@ def _mount_type(raw: str | None) -> MountType:
         return MountType.UNKNOWN
 
 
-def parse_compose_config(config: dict) -> list[ServiceMounts]:
+def parse_compose_config(config: dict, *, project: str | None = None) -> list[ServiceMounts]:
     """Parse mounts from a resolved Compose config object."""
     if "services" not in config or config.get("services") is None:
         services: dict = {}
     else:
         services = config["services"]
+    if project is None:
+        raw_name = config.get("name")
+        if isinstance(raw_name, str) and raw_name.strip():
+            project = raw_name.strip()
     if not isinstance(services, dict):
         raise ComposeError("Compose configuration has an invalid services section.")
 
@@ -90,6 +94,7 @@ def parse_compose_config(config: dict) -> list[ServiceMounts]:
                 name=str(service_name),
                 mounts=tuple(mounts),
                 image=_service_image(service),
+                project=project,
             )
         )
 
@@ -118,7 +123,7 @@ def _volume_name_map(config: dict) -> dict[str, str]:
     return mapping
 
 
-def load_compose_config(compose_file: Path) -> dict:
+def load_compose_config(compose_file: Path, *, project: str | None = None) -> dict:
     """Load resolved Compose JSON via `docker compose config`."""
     path = compose_file.expanduser()
     if not path.exists():
@@ -130,17 +135,18 @@ def load_compose_config(compose_file: Path) -> dict:
     if docker is None:
         raise ComposeError("Docker is not installed or not available on PATH.")
 
-    # Use an argument list (never shell=True) and pin the project directory to
-    # the Compose file location so relative bind mounts resolve predictably.
-    command = [
-        docker,
-        "compose",
-        "-f",
-        str(path.resolve()),
-        "config",
-        "--format",
-        "json",
-    ]
+    command = [docker, "compose"]
+    if project:
+        command.extend(["-p", project])
+    command.extend(
+        [
+            "-f",
+            str(path.resolve()),
+            "config",
+            "--format",
+            "json",
+        ]
+    )
     try:
         # Command is a fixed argv list: resolved `docker` binary plus constant
         # Compose subcommands. Compose file path is validated as an existing file.
@@ -168,9 +174,27 @@ def load_compose_config(compose_file: Path) -> dict:
     return data
 
 
-def discover_mounts(compose_file: Path) -> list[ServiceMounts]:
-    """Discover service mounts from a Compose file."""
-    return parse_compose_config(load_compose_config(compose_file))
+def discover_mounts(
+    compose_file: Path,
+    *,
+    extra_files: tuple[Path, ...] = (),
+    project: str | None = None,
+) -> list[ServiceMounts]:
+    """Discover service mounts from one or more Compose files."""
+    seen: set[Path] = set()
+    results: list[ServiceMounts] = []
+    for path in (compose_file, *extra_files):
+        resolved = path.expanduser().resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        proj = project if path == compose_file else None
+        if proj is None:
+            proj = resolved.parent.name
+        cfg = load_compose_config(resolved, project=proj)
+        results.extend(parse_compose_config(cfg, project=proj))
+    results.sort(key=lambda item: (item.project or "", item.name))
+    return results
 
 
 def format_mount_report(services: list[ServiceMounts]) -> str:

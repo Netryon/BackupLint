@@ -37,7 +37,12 @@ def _kind_from_restic_message(message: str) -> OperationalKind:
     lower = (message or "").lower()
     if "authentication failed" in lower:
         return OperationalKind.AUTHENTICATION
-    if "repository is locked" in lower or "already locked" in lower:
+    if (
+        "repository is locked" in lower
+        or "already locked" in lower
+        or "empty snapshot json" in lower
+        or "produced no output" in lower
+    ):
         return OperationalKind.LOCKED
     if "permission denied" in lower:
         return OperationalKind.PERMISSION

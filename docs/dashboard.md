@@ -66,6 +66,50 @@ There is **no multi-user RBAC** and **no SSO** in v1.
 
 An agent can show **PASS** audit and **offline** presence at the same time.
 
+## Service assurance (project / service / mount)
+
+The dashboard projects **stored** `audit.completed` payloads. It does not poll
+Docker, and it is not a generic container health monitor. Container running is
+not the same as backed up.
+
+| Field | Meaning |
+|------|---------|
+| Persistent data | Bind mounts and named volumes that BackupLint did not skip as cache/temporary/infrastructure |
+| Coverage | Per-mount: protected / not protected / stale / skipped / unsupported |
+| Freshness | Per-mount only when the finding includes snapshot evidence or a stale coverage status. Otherwise **UNKNOWN** or **NOT APPLICABLE** — never a fake PASS |
+| Integrity | Repository-scoped (`restic check` / configured integrity mode). Shown on each service for context, not as a per-mount PASS |
+| Restore verification | Repository-scoped isolated restore. **NOT RUN** if absent. `restic check` is not a restore |
+| Overall | Worst of that service's persistent coverage/freshness plus repository integrity/restore. Sibling services stay independent for coverage FAIL |
+
+Explicit non-success placeholders: **NOT RUN**, **UNKNOWN**, **NOT APPLICABLE**.
+PASS is never shown for a check that did not run.
+
+Repository/operational **ERROR** (timeout, auth, unavailable) is attributed to
+the repository, not as a coverage FAIL.
+
+Compose project names appear when the audit finding includes them; otherwise
+services are grouped under `compose`. Image identity is shown when present in
+the payload.
+
+### Pages
+
+- Fleet overview: presence, audit, persistent-service counts, alert counts
+- Agent detail: `/dashboard/agents/{id}` — service table, attributed alerts, last 25 audit transitions
+- Service drill-down: `/dashboard/agents/{id}/services/{project}/{service}` (legacy `?project=` still accepted)
+- Alert links use the same project-aware URL and may include `?mount=` to highlight the failing path
+
+Infrastructure binds such as `/etc/localtime`, `/etc/timezone`, the Docker socket, and
+read-only host CA/zoneinfo mounts are classified as **infrastructure** and skipped
+unless listed in `backup_paths`. Arbitrary `/etc/*` app config remains persistent.
+
+## API (authenticated)
+
+- `GET /v1/dashboard/overview`
+- `GET /v1/dashboard/agents` (filters + pagination; includes `assurance` counts)
+- `GET /v1/dashboard/agents/{id}` (includes `assurance` tree)
+- `GET /v1/dashboard/agents/{id}/services/{name}`
+- `GET /v1/dashboard/events` (bounded history)
+
 ## Network / TLS
 
 Dashboard shares the controller TLS certificate. Prefer reverse-proxy TLS
@@ -78,10 +122,3 @@ insecurely. Do not expose debug endpoints publicly.
 - No enterprise SSO/RBAC in v1
 - Sessions are in-process (re-login after controller restart)
 - Notifications are minimal
-
-## API (authenticated)
-
-- `GET /v1/dashboard/overview`
-- `GET /v1/dashboard/agents` (filters + pagination)
-- `GET /v1/dashboard/agents/{id}`
-- `GET /v1/dashboard/events` (bounded history)
