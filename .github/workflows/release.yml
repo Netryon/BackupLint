@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing GitHub Release tag whose official wheel and sdist will be published
+        required: true
+        default: "v1.0.0"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish existing release artifacts to PyPI
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/backuplint/
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download official GitHub Release distributions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          gh release download "${RELEASE_TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --dir dist \
+            --pattern "backuplint-1.0.0-py3-none-any.whl" \
+            --pattern "backuplint-1.0.0.tar.gz"
+          ls -l dist
+
+      - name: Verify official artifact hashes
+        run: |
+          set -euo pipefail
+          cd dist
+          printf '%s\n' \
+            "9ea11b5e3821bdf04ba262fde0678e2feb2532fdf1378b4ade722483fc03afb2  backuplint-1.0.0-py3-none-any.whl" \
+            "5c14a48e41f47546d5f8fe514562ea944cf0855d47843cd5bae5d1f5d4a5c218  backuplint-1.0.0.tar.gz" \
+            | sha256sum -c
+          echo "Official v1.0.0 hashes matched. Publishing those files only."
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
