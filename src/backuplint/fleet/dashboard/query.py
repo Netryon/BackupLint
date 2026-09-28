@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from backuplint.events import EventType
@@ -36,6 +38,84 @@ TREND_STATUSES = ("PASS", "WARN", "FAIL", "ERROR")
 MAX_RECENT_ALERTS = 30
 MAX_TREND_BUCKETS = 48
 MAX_DASHBOARD_WINDOW = timedelta(days=7)
+_SIEM_ERROR_MAX = 240
+
+
+def _siem_status_from_queue(db_path: Path) -> dict[str, object] | None:
+    """Read-only queue counts when telemetry.jsonl is absent."""
+    if not db_path.is_file():
+        return None
+    try:
+        conn = sqlite3.connect(str(db_path), timeout=2.0)
+        try:
+            conn.execute("PRAGMA query_only=ON")
+            rows = conn.execute(
+                "SELECT status, COUNT(*) FROM siem_export_queue GROUP BY status"
+            ).fetchall()
+            last = conn.execute(
+                """
+                SELECT last_error, last_attempt_at, delivered_at
+                FROM siem_export_queue
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            ).fetchone()
+            last_ok = conn.execute(
+                """
+                SELECT delivered_at FROM siem_export_queue
+                WHERE delivered_at IS NOT NULL
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            ).fetchone()
+            last_err = conn.execute(
+                """
+                SELECT last_error, last_attempt_at FROM siem_export_queue
+                WHERE last_error IS NOT NULL AND last_error != ''
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            ).fetchone()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return {
+            "endpoint_health": "unknown",
+            "queue_depth_by_status": {},
+            "failed_total": 0,
+            "last_error": None,
+        }
+    depth = {
+        "pending": 0,
+        "in_flight": 0,
+        "delivered": 0,
+        "dead_letter": 0,
+    }
+    for status, count in rows:
+        key = str(status)
+        if key in depth:
+            depth[key] = int(count)
+    pending = int(depth.get("pending") or 0) + int(depth.get("in_flight") or 0)
+    dead = int(depth.get("dead_letter") or 0)
+    err_text = str(last_err[0])[:_SIEM_ERROR_MAX] if last_err and last_err[0] else None
+    if dead:
+        health = "down"
+    elif pending and err_text:
+        health = "degraded"
+    elif pending:
+        health = "degraded"
+    else:
+        health = "healthy"
+    return {
+        "endpoint_health": health,
+        "queue_depth_by_status": depth,
+        "failed_total": dead,
+        "last_success_at": str(last_ok[0]) if last_ok and last_ok[0] else None,
+        "last_error": err_text,
+        "last_error_at": str(last_err[1]) if last_err and last_err[1] else (
+            str(last[1]) if last and last[1] else None
+        ),
+    }
 
 
 def _capability_summary(capabilities_json: str | None) -> dict[str, object]:
@@ -1088,13 +1168,16 @@ class DashboardQueryService:
         }
 
     def siem_status(self) -> dict[str, object] | None:
-        """Optional SIEM integration telemetry (v0.7 stub for future UI panel)."""
+        """SIEM queue/telemetry for the operator dashboard (no secrets)."""
         try:
             from backuplint.siem.runtime import read_telemetry_tail
         except ImportError:
             return None
-        path = self.store.path.parent / "siem" / "telemetry.jsonl"
-        return read_telemetry_tail(path)
+        siem_dir = self.store.path.parent / "siem"
+        tail = read_telemetry_tail(siem_dir / "telemetry.jsonl")
+        if tail:
+            return tail
+        return _siem_status_from_queue(siem_dir / "siem_export.sqlite3")
 
     def list_policies(self, *, limit: int | None = None) -> dict[str, object]:
         page = self._clamp_limit(limit)

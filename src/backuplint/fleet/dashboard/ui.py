@@ -180,9 +180,11 @@ a:hover { text-decoration: underline; }
   background: var(--accent);
   color: #fff;
 }
-.side-nav .nav-ico {
-  width: 18px; height: 18px; opacity: .9; flex: 0 0 auto;
+.side-nav .nav-ico, .side-nav svg {
+  width: 18px; height: 18px; opacity: .9; flex: 0 0 18px;
+  max-width: 18px; max-height: 18px;
 }
+.side-nav a { min-width: 0; }
 .sidebar-foot {
   border-top: 1px solid var(--line-soft);
   padding-top: .85rem;

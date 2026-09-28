@@ -141,3 +141,36 @@ def test_service_page_escapes_and_keep_project_links() -> None:
     assert "&lt;script&gt;" in html
     assert "Repository assurance" in html
     assert "class='mount-focus'" in html
+
+
+def test_siem_status_reads_queue_when_telemetry_missing(tmp_path) -> None:
+    import sqlite3
+
+    from backuplint.fleet.dashboard.query import _siem_status_from_queue
+
+    db = tmp_path / "siem_export.sqlite3"
+    conn = sqlite3.connect(db)
+    conn.execute(
+        """
+        CREATE TABLE siem_export_queue (
+            id INTEGER PRIMARY KEY,
+            event_id TEXT,
+            status TEXT,
+            last_error TEXT,
+            last_attempt_at TEXT,
+            delivered_at TEXT
+        )
+        """
+    )
+    conn.execute(
+        "INSERT INTO siem_export_queue VALUES (1,'e1','pending',"
+        "'CERTIFICATE_VERIFY_FAILED','2026-09-28T12:00:00Z',NULL)"
+    )
+    conn.commit()
+    conn.close()
+    snap = _siem_status_from_queue(db)
+    assert snap is not None
+    assert snap["queue_depth_by_status"]["pending"] == 1
+    assert snap["endpoint_health"] == "degraded"
+    assert "CERTIFICATE_VERIFY_FAILED" in str(snap["last_error"])
+    assert "max-width: 18px" in _css()
