@@ -9,7 +9,7 @@ from typing import Any
 
 from backuplint.timeutil import format_relative_time
 
-_STATUS_LABELS = {
+_STATUS_LABELS = {  # nosec B105 — audit status words, not passwords
     "PASS": "PASS",
     "WARN": "WARN",
     "FAIL": "FAIL",
@@ -33,7 +33,7 @@ _PRESENCE_LABELS = {
     "OFFLINE": "OFFLINE",
 }
 
-_STATUS_CLASS = {
+_STATUS_CLASS = {  # nosec B105 — CSS tone keys, not passwords
     "PASS": "ok",
     "WARN": "warn",
     "FAIL": "fail",
