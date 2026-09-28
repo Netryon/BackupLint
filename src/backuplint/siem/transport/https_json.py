@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import ssl
 import urllib.error
 import urllib.request
@@ -16,7 +15,6 @@ from backuplint.siem.queue import redact_queue_error
 from backuplint.siem.transport.base import TransportResult, classify_http_status
 
 _MAX_RESPONSE_BYTES = 64 * 1024
-_TLS_VERIFY_ENV = "BACKUPLINT_SIEM_TLS_VERIFY"
 
 
 def parse_retry_after(header_value: str | None) -> float | None:
@@ -41,12 +39,13 @@ def parse_retry_after(header_value: str | None) -> float | None:
 
 
 def tls_verify_enabled(*, config_verify: bool) -> bool:
-    if not config_verify:
-        env = os.environ.get(_TLS_VERIFY_ENV, "").strip().lower()
-        if env in {"0", "false", "no", "off"}:
-            return False
-        return True
-    return True
+    """Honor ``siem.tls.verify`` for the SIEM destination only.
+
+    ``false`` disables certificate verification for this HTTPS JSON export.
+    ``true`` keeps normal TLS verification (and any configured custom CA).
+    This never changes controller/agent mTLS.
+    """
+    return bool(config_verify)
 
 
 class HttpsJsonTransport:
@@ -153,14 +152,19 @@ class HttpsJsonTransport:
 
     def _ssl_context(self, config: SiemConfig) -> ssl.SSLContext:
         verify = tls_verify_enabled(config_verify=config.tls_verify)
+        if not verify:
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            return context
         if config.tls_ca_file:
             context = ssl.create_default_context(cafile=str(config.tls_ca_file))
         else:
             context = ssl.create_default_context()
         context.minimum_version = ssl.TLSVersion.TLSv1_2
-        if not verify:
-            context.check_hostname = False
-            context.verify_mode = ssl.CERT_NONE
+        context.verify_mode = ssl.CERT_REQUIRED
+        context.check_hostname = True
         return context
 
 

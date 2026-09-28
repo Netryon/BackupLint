@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from http.cookies import SimpleCookie
 from urllib.parse import parse_qs, unquote
 
+from backuplint import __version__ as SOFTWARE_VERSION
 from backuplint.fleet.dashboard import ui
 from backuplint.fleet.dashboard.auth import (
     CSRF_COOKIE,
@@ -124,9 +125,18 @@ def _q_bool(qs: dict[str, list[str]], key: str) -> bool | None:
 
 
 class DashboardHttp:
-    def __init__(self, auth: DashboardAuth, query: DashboardQueryService) -> None:
+    def __init__(
+        self,
+        auth: DashboardAuth,
+        query: DashboardQueryService,
+        *,
+        controller_hostname: str = "controller",
+        software_version: str = SOFTWARE_VERSION,
+    ) -> None:
         self.auth = auth
         self.query = query
+        self.controller_hostname = controller_hostname
+        self.software_version = software_version
 
     def handle(
         self,
@@ -353,8 +363,15 @@ class DashboardHttp:
         if session is None:
             return _redirect("/dashboard/login")
         csrf = getattr(session, "csrf", "")
+        overview = self.query.fleet_overview()
+        totals = overview.get("totals") if isinstance(overview.get("totals"), dict) else {}
+        chrome = {
+            "controller_hostname": self.controller_hostname,
+            "software_version": self.software_version,
+            "online": totals.get("online"),
+            "agents": totals.get("agents"),
+        }
         if path in ("/dashboard", "/dashboard/"):
-            overview = self.query.fleet_overview()
             window = self.query.resolve_time_window(
                 time_range=_q_get(qs, "time_range"),
                 time_from=_q_get(qs, "time_from"),
@@ -385,7 +402,49 @@ class DashboardHttp:
                     window=window,
                     csrf=csrf,
                     qs=qs,
+                    chrome=chrome,
                 ),
+            )
+        if path in ("/dashboard/agents", "/dashboard/agents/"):
+            agents = self.query.list_agents(
+                limit=_q_int(qs, "limit") or 50,
+                offset=_q_int(qs, "offset") or 0,
+                q=_q_get(qs, "q"),
+                presence=_q_get(qs, "presence"),
+                audit_status=_q_get(qs, "audit_status"),
+                capability=_q_get(qs, "capability"),
+                software_version=_q_get(qs, "software_version"),
+                protocol_version=_q_int(qs, "protocol_version"),
+                has_data_gap=_q_bool(qs, "has_data_gap"),
+            )
+            return _html(
+                200,
+                ui.page_agents(
+                    overview,
+                    agents,
+                    csrf=csrf,
+                    qs=qs,
+                    chrome=chrome,
+                ),
+            )
+        if path in ("/dashboard/alerts", "/dashboard/alerts/"):
+            window = self.query.resolve_time_window(
+                time_range=_q_get(qs, "time_range") or "24h",
+                time_from=_q_get(qs, "time_from"),
+                time_to=_q_get(qs, "time_to"),
+            )
+            alerts = self.query.list_recent_alerts(
+                time_from=window["time_from"],
+                time_to=window["time_to"],
+            )
+            return _html(
+                200,
+                ui.page_alerts(alerts, csrf=csrf, qs=qs, chrome=chrome),
+            )
+        if path in ("/dashboard/siem", "/dashboard/siem/"):
+            return _html(
+                200,
+                ui.page_siem(self.query.siem_status(), csrf=csrf, chrome=chrome),
             )
         nested = _UI_AGENT_SERVICE_NESTED.match(path)
         if nested:
@@ -405,6 +464,7 @@ class DashboardHttp:
                     detail,
                     csrf=csrf,
                     highlight_mount=_q_get(qs, "mount"),
+                    chrome=chrome,
                 ),
             )
         svc = _UI_AGENT_SERVICE_PATH.match(path)
@@ -425,6 +485,7 @@ class DashboardHttp:
                     detail,
                     csrf=csrf,
                     highlight_mount=_q_get(qs, "mount"),
+                    chrome=chrome,
                 ),
             )
         m = _UI_AGENT_PATH.match(path)
@@ -432,7 +493,7 @@ class DashboardHttp:
             detail = self.query.agent_detail(m.group(1))
             if detail is None:
                 return _html(404, ui.page_error("Agent not found", m.group(1)))
-            return _html(200, ui.page_agent(detail, csrf=csrf))
+            return _html(200, ui.page_agent(detail, csrf=csrf, chrome=chrome))
         if path == "/dashboard/history":
             time_from = _q_get(qs, "time_from")
             time_to = _q_get(qs, "time_to")
@@ -483,6 +544,7 @@ class DashboardHttp:
                     window=window,
                     csrf=csrf,
                     qs=qs,
+                    chrome=chrome,
                 ),
             )
         if path == "/dashboard/policy":
@@ -494,6 +556,7 @@ class DashboardHttp:
                     self.query.list_policy_rollouts(limit=_q_int(qs, "limit") or 50),
                     self.query.list_policy_audit(limit=_q_int(qs, "limit") or 50),
                     csrf=csrf,
+                    chrome=chrome,
                 ),
             )
         return _html(404, ui.page_error("Not found", path))

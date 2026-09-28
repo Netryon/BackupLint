@@ -6,6 +6,14 @@ import html
 from typing import Any
 from urllib.parse import quote, urlencode
 
+from backuplint.fleet.dashboard.format import (
+    deployment_form_label,
+    is_fleet_only,
+    relative_time_html,
+    status_tag,
+    warn_reason_html,
+)
+
 
 # Official BackupLint matched-state mark — inline SVG (CSP: default-src 'none'
 # blocks data: / external <img>; inline SVG is part of the HTML document).
@@ -52,41 +60,51 @@ def _service_href(
     return path
 
 
-def _state_pill(value: object) -> str:
-    raw = "" if value is None else str(value)
-    if not raw or raw == "None":
-        label = "—"
-        cls = ""
-    else:
-        label = raw.replace("_", " ")
-        cls = raw.replace(" ", "_")
-    return f"<span class='pill {_e(cls)}'>{_e(label)}</span>"
+def _state_pill(value: object, *, kind: str | None = None) -> str:
+    raw = "" if value is None else str(value).strip()
+    resolved = kind
+    if resolved is None:
+        if raw.lower() in {"online", "stale", "offline"}:
+            resolved = "presence"
+        else:
+            resolved = "status"
+    return status_tag(value, kind=resolved)
 
 
 def _css() -> str:
     return """
 :root {
-  --bg: #171b21;
-  --surface: #20252B;
-  --surface-2: #262c34;
-  --text: #FFFFFF;
-  --muted: #9aa3ad;
-  --line: #323941;
-  --line-soft: #2a3038;
-  --ok: #2fbf71;
-  --ok-bg: rgba(47,191,113,.12);
-  --warn: #e0a53a;
-  --warn-bg: rgba(224,165,58,.12);
-  --bad: #e55353;
-  --bad-bg: rgba(229,83,83,.12);
-  --info: #5b8def;
+  --bg: #141820;
+  --surface: #1c222b;
+  --surface-2: #242b35;
+  --text: #f4f6f8;
+  --muted: #8b95a1;
+  --line: #323a44;
+  --line-soft: #2a313a;
+  --ok: #1f8a4c;
+  --ok-bg: rgba(31,138,76,.14);
+  --warn: #b7811a;
+  --warn-bg: rgba(183,129,26,.16);
+  --bad: #c43c3c;
+  --bad-bg: rgba(196,60,60,.16);
+  --error: #8f1d24;
+  --error-bg: rgba(143,29,36,.2);
+  --info: #3155E7;
   --info-bg: rgba(49,85,231,.14);
   --accent: #3155E7;
   --accent-hover: #4066f0;
-  --shadow: 0 1px 2px rgba(0,0,0,.28), 0 8px 24px rgba(0,0,0,.18);
-  --radius: 10px;
-  --sidebar-w: 248px;
+  --shadow: 0 1px 2px rgba(0,0,0,.24);
+  --radius: 8px;
+  --sidebar-w: 232px;
   --font: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --row: 44px;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }
@@ -315,27 +333,42 @@ th {
   color: var(--muted); font-weight: 600; font-size: .72rem;
   text-transform: uppercase; letter-spacing: .04em;
 }
-.pill {
-  display: inline-block;
-  padding: .12rem .5rem;
+.pill, .tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
   border-radius: 999px;
   border: 1px solid transparent;
-  font-size: .75rem;
-  font-weight: 600;
-  letter-spacing: .01em;
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  white-space: nowrap;
+  word-break: keep-all;
+  overflow-wrap: normal;
   background: var(--surface-2);
   color: var(--muted);
+  min-height: 22px;
 }
-.pill.online, .pill.PASS {
-  color: var(--ok); background: var(--ok-bg); border-color: rgba(47,191,113,.28);
+.tag-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; flex: 0 0 auto;
 }
-.pill.stale, .pill.WARN {
-  color: var(--warn); background: var(--warn-bg); border-color: rgba(224,165,58,.28);
+.tag-label { white-space: nowrap; }
+.tag-ok, .pill.online, .pill.PASS, .pill.ONLINE {
+  color: var(--ok); background: var(--ok-bg); border-color: rgba(31,138,76,.32);
 }
-.pill.offline, .pill.FAIL, .pill.ERROR, .pill.QUEUE_OVERFLOW {
-  color: var(--bad); background: var(--bad-bg); border-color: rgba(229,83,83,.28);
+.tag-warn, .pill.stale, .pill.WARN, .pill.STALE {
+  color: var(--warn); background: var(--warn-bg); border-color: rgba(183,129,26,.32);
 }
-.pill.UNKNOWN, .pill.NOT_RUN, .pill.NOT_APPLICABLE {
+.tag-fail, .pill.offline, .pill.FAIL, .pill.OFFLINE, .pill.QUEUE_OVERFLOW {
+  color: var(--bad); background: var(--bad-bg); border-color: rgba(196,60,60,.32);
+}
+.tag-error, .pill.ERROR {
+  color: #f3d0d2; background: var(--error-bg); border-color: rgba(143,29,36,.45);
+}
+.tag-neutral, .pill.UNKNOWN, .pill.NOT_RUN, .pill.NOT_APPLICABLE, .pill.NONE {
   color: var(--muted); background: var(--surface-2); border-color: var(--line);
 }
 form.filters {
@@ -354,11 +387,58 @@ button[type="submit"], .btn-primary {
 button[type="submit"]:hover, .btn-primary:hover { background: var(--accent-hover); }
 .muted { color: var(--muted); }
 .err { color: var(--bad); margin-bottom: .75rem; }
-h1 { font-size: 1.4rem; margin: 0 0 .75rem; word-break: break-word; }
+h1 { font-size: 1.4rem; margin: 0 0 .75rem; overflow-wrap: break-word; word-break: normal; }
 h2 { font-size: 1.02rem; margin: 1.35rem 0 .55rem; }
 .pager { display: flex; gap: .75rem; flex-wrap: wrap; margin-top: 1rem; }
 .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-td, .muted, h1 { overflow-wrap: anywhere; word-break: break-word; }
+td { overflow-wrap: break-word; word-break: normal; }
+td .path, .path, .mono {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.when { white-space: nowrap; }
+.reason { color: var(--muted); font-size: 0.8rem; margin-top: 4px; overflow-wrap: break-word; word-break: normal; }
+.agent-cell .id { color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
+.services-cell { white-space: normal; }
+.project-block { margin: 0 0 var(--space-5); }
+.project-block h3 {
+  margin: 0 0 var(--space-3);
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+.stack-card { display: none !important; }
+.empty {
+  padding: var(--space-5);
+  color: var(--muted);
+  text-align: center;
+}
+.banner-info {
+  background: var(--info-bg);
+  border: 1px solid rgba(49,85,231,.28);
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+  margin: 0 0 var(--space-4);
+}
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.skip-link {
+  position: absolute; left: -999px; top: 0;
+}
+.skip-link:focus { left: 8px; z-index: 20; background: var(--accent); color: #fff; padding: 8px 12px; }
+.chrome-id { font-size: 0.72rem; color: var(--muted); }
+.metric-sub { color: var(--muted); font-size: 0.78rem; margin-top: 4px; white-space: normal; }
+.alert-filters a, .chip {
+  display: inline-flex; align-items: center;
+  padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--muted);
+  text-decoration: none; font-size: 0.78rem; white-space: nowrap;
+}
+.alert-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 .readonly-banner {
   display: inline-flex; align-items: center; gap: .4rem;
   background: var(--info-bg); color: #a8b9ff;
@@ -409,31 +489,49 @@ body.login-body {
   .sidebar-foot { display: none; }
   .charts { grid-template-columns: 1fr; }
 }
+@media (max-width: 1024px) {
+  .hide-tablet { display: none; }
+}
 @media (max-width: 800px) {
   main, .topbar { padding-left: 1rem; padding-right: 1rem; }
   .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   table { font-size: .82rem; }
   form.filters > * { flex: 1 1 140px; }
+  .desktop-table { display: none; }
+  .stack-card { display: block !important; }
 }
 @media (max-width: 420px) {
-  .cards { grid-template-columns: 1fr 1fr; }
+  .cards { grid-template-columns: 1fr; }
 }
 """
 
 
 def _nav_icon(name: str) -> str:
     icons = {
-        "fleet": (
+        "overview": (
             '<svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
             'stroke-width="1.75"><rect x="3" y="3" width="7" height="7" rx="1.5"/>'
             '<rect x="14" y="3" width="7" height="7" rx="1.5"/>'
             '<rect x="3" y="14" width="7" height="7" rx="1.5"/>'
             '<rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>'
         ),
+        "agents": (
+            '<svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+            'stroke-width="1.75"><circle cx="9" cy="8" r="3"/><path d="M4 19c1-3 3.5-5 5-5s4 2 5 5"/>'
+            '<circle cx="17" cy="9" r="2.4"/><path d="M15.5 19c.4-2 1.8-3.4 3.5-3.4"/></svg>'
+        ),
+        "alerts": (
+            '<svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+            'stroke-width="1.75"><path d="M12 4 3 19h18L12 4z"/><path d="M12 10v5M12 17h.01"/></svg>'
+        ),
         "policy": (
             '<svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
             'stroke-width="1.75"><path d="M7 4h7l3 3v13H7z"/>'
             '<path d="M14 4v3h3M9 12h6M9 16h6"/></svg>'
+        ),
+        "siem": (
+            '<svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+            'stroke-width="1.75"><path d="M4 18V6m0 12h16M8 14v4M12 10v8M16 7v11"/></svg>'
         ),
         "history": (
             '<svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
@@ -451,6 +549,7 @@ def _layout(
     csrf: str = "",
     active: str = "",
     subtitle: str = "",
+    chrome: dict[str, Any] | None = None,
 ) -> str:
     logout = ""
     if csrf:
@@ -460,11 +559,25 @@ def _layout(
           <input type="hidden" name="csrf_token" value="{_e(csrf)}" />
           <button type="submit">Log out</button>
         </form>"""
-    fleet_cls = "active" if active == "fleet" else ""
-    policy_cls = "active" if active == "policy" else ""
-    history_cls = "active" if active == "history" else ""
+    info = chrome or {}
+    host = str(info.get("controller_hostname") or "controller")
+    ver = str(info.get("software_version") or "")
+    online = info.get("online")
+    agents = info.get("agents")
+    fleet_state = ""
+    if agents is not None:
+        fleet_state = (
+            f"<div class='chrome-id'><span class='status-dot'></span>"
+            f"{_e(online)} / {_e(agents)} agents online</div>"
+        )
+    def _cls(name: str) -> str:
+        return "active" if active == name else ""
     sub = f'<p class="sub">{_e(subtitle)}</p>' if subtitle else ""
-    # Page bodies own the primary <h1>; topbar only carries logout + optional subtitle.
+    identity = (
+        f"<div class='chrome-id'>{_e(host)}"
+        + (f" · BackupLint {_e(ver)}" if ver else "")
+        + "</div>"
+    )
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -474,6 +587,7 @@ def _layout(
 <style>{_css()}</style>
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to content</a>
 <div class="app">
   <aside class="sidebar">
     <a class="brand brand-block" href="/dashboard/">
@@ -483,14 +597,18 @@ def _layout(
         <span class="tag">Verify today. Trust tomorrow.</span>
       </span>
     </a>
-    <nav class="side-nav">
-      <a class="{fleet_cls}" href="/dashboard/">{_nav_icon("fleet")} Fleet</a>
-      <a class="{policy_cls}" href="/dashboard/policy">{_nav_icon("policy")} Policy</a>
-      <a class="{history_cls}" href="/dashboard/history">{_nav_icon("history")} History</a>
+    <nav class="side-nav" aria-label="Dashboard">
+      <a class="{_cls("overview")}" href="/dashboard/">{_nav_icon("overview")} Overview</a>
+      <a class="{_cls("agents")}" href="/dashboard/agents">{_nav_icon("agents")} Agents</a>
+      <a class="{_cls("alerts")}" href="/dashboard/alerts">{_nav_icon("alerts")} Alerts</a>
+      <a class="{_cls("policy")}" href="/dashboard/policy">{_nav_icon("policy")} Policies</a>
+      <a class="{_cls("siem")}" href="/dashboard/siem">{_nav_icon("siem")} SIEM</a>
+      <a class="{_cls("history")}" href="/dashboard/history">{_nav_icon("history")} System</a>
     </nav>
     <div class="sidebar-foot">
-      <div><span class="status-dot"></span>Read-only fleet view</div>
-      <div style="margin-top:.35rem">Presence ≠ audit health</div>
+      {identity}
+      {fleet_state}
+      <div style="margin-top:.35rem">Presence is heartbeat freshness, not audit health.</div>
     </div>
   </aside>
   <div class="content">
@@ -498,7 +616,7 @@ def _layout(
       <div>{sub}</div>
       <div class="topbar-actions">{logout}</div>
     </div>
-    <main>
+    <main id="main">
 {body}
     </main>
   </div>
@@ -617,19 +735,21 @@ def _recent_alerts_panel(alerts: dict[str, Any]) -> str:
             if aid
             else "—"
         )
+        mount = item.get("mount") or ""
         rows.append(
             "<tr>"
-            f"<td>{_e(item.get('occurred_at'))}</td>"
+            f"<td>{relative_time_html(item.get('occurred_at'))}</td>"
             f"<td>{agent_cell}</td>"
-            f"<td><span class='pill {_e(pill_cls)}'>{_e(kind)}</span></td>"
-            f"<td>{_e(item.get('service') or item.get('event_type') or '')}</td>"
-            f"<td>{_e(item.get('mount') or '')} {_e(item.get('summary'))}</td>"
+            f"<td>{_state_pill(pill_cls)}</td>"
+            f"<td>{_e(item.get('project') or '—')} / {_e(item.get('service') or item.get('event_type') or '')}</td>"
+            f"<td><span class='path' title='{_e(mount)}'>{_e(mount)}</span>"
+            f"{warn_reason_html(kind, item.get('summary'))}</td>"
             "</tr>"
         )
     body = (
         "".join(rows)
         if rows
-        else "<tr><td colspan='5' class='muted'>No alerts in this range</td></tr>"
+        else "<tr><td colspan='5' class='muted empty'>No alerts in this range.</td></tr>"
     )
     return f"""
 <div class="panel">
@@ -728,6 +848,8 @@ def page_fleet(
     *,
     csrf: str,
     qs: dict[str, list[str]],
+    chrome: dict[str, Any] | None = None,
+    active: str = "overview",
 ) -> str:
     totals = overview.get("totals") or {}
     audit = totals.get("audit") or {}
@@ -759,24 +881,28 @@ def page_fleet(
             "offset": "0",
         },
     )
+    healthy_svc = totals.get("healthy_services", totals.get("healthy_persistent_services", 0))
+    warn_svc = totals.get("warning_services", 0)
+    fail_svc = totals.get("failing_services", totals.get("failing_persistent_services", 0))
+    err_svc = totals.get("error_services", 0)
+    restore_attn = int(audit.get("FAIL") or 0) + int(audit.get("ERROR") or 0)
     cards = f"""
-<div class="section-label">Presence</div>
 <div class="cards">
-  <div class="card tone-accent"><div class="n">{_e(agent_total)}</div><div class="l">Agents</div></div>
-  <div class="card tone-ok"><div class="n">{_e(online)}</div><div class="l">Online</div></div>
-  <div class="card tone-warn"><div class="n">{_e(stale)}</div><div class="l">Stale</div></div>
-  <div class="card tone-bad"><div class="n">{_e(offline)}</div><div class="l">Offline</div></div>
-</div>
-<div class="section-label">Audit health</div>
-<div class="cards">
-  <div class="card tone-ok"><div class="n">{_e(audit.get('PASS', 0))}</div><div class="l">Audit PASS</div></div>
-  <div class="card tone-warn"><div class="n">{_e(audit.get('WARN', 0))}</div><div class="l">Audit WARN</div></div>
-  <div class="card tone-bad"><div class="n">{_e(audit.get('FAIL', 0))}</div><div class="l">Audit FAIL</div></div>
-  <div class="card tone-bad"><div class="n">{_e(audit.get('ERROR', 0))}</div><div class="l">Audit ERROR</div></div>
-  <div class="card"><div class="n">{_e(totals.get('data_gap_or_overflow_agents', 0))}</div><div class="l">DATA_GAP / overflow</div></div>
-  <div class="card"><div class="n">{_e(totals.get('protocol_compatibility_warnings', 0))}</div><div class="l">Protocol warnings</div></div>
-  <div class="card"><div class="n">{_e(totals.get('persistent_services', 0))}</div><div class="l">Persistent services</div></div>
-  <div class="card"><div class="n">{_e(totals.get('assurance_alerts', 0))}</div><div class="l">Service/mount alerts</div></div>
+  <div class="card tone-accent"><div class="n">{_e(agent_total)}</div>
+    <div class="l">Agents</div>
+    <div class="metric-sub">{_e(online)} online · {_e(stale)} stale · {_e(offline)} offline</div></div>
+  <div class="card"><div class="n">{_e(totals.get('persistent_services', 0))}</div>
+    <div class="l">Persistent services</div>
+    <div class="metric-sub">Monitored Compose services with durable data</div></div>
+  <div class="card"><div class="n">{_e(healthy_svc)} / {_e(warn_svc)}</div>
+    <div class="l">Assurance</div>
+    <div class="metric-sub">{_e(healthy_svc)} healthy · {_e(warn_svc)} warning · {_e(fail_svc)} fail · {_e(err_svc)} error</div></div>
+  <div class="card tone-warn"><div class="n">{_e(totals.get('assurance_alerts', 0))}</div>
+    <div class="l">Active alerts</div>
+    <div class="metric-sub">Object-level coverage / integrity / restore attention</div></div>
+  <div class="card"><div class="n">{_e(restore_attn)}</div>
+    <div class="l">Restore / audit attention</div>
+    <div class="metric-sub">{_e(audit.get('FAIL', 0))} FAIL · {_e(audit.get('ERROR', 0))} ERROR agents</div></div>
 </div>
 <p class="muted">Online/stale/offline is heartbeat freshness — separate from current audit health. Integrity and restore are repository-scoped.</p>
 <div class="charts">
@@ -813,36 +939,48 @@ def page_fleet(
 </form>
 """
     rows = []
+    cards_mobile = []
     for item in agents.get("items") or []:
         aid = item.get("agent_id")
-        gap = "DATA_GAP" if item.get("has_data_gap") else ""
-        warn = "proto!" if item.get("protocol_warning") else ""
         a = item.get("assurance") or {}
-        rows.append(
+        ident = item.get("identity") if isinstance(item.get("identity"), dict) else {}
+        host = item.get("hostname") or ident.get("hostname") or ""
+        form = deployment_form_label(item.get("deployment_form"))
+        persist = int(a.get("persistent_service_count") or 0)
+        healthy = int(a.get("healthy_count") or 0)
+        warn_n = int(a.get("warning_count") or 0)
+        label = item.get("label") or ident.get("label") or aid
+        row = (
             "<tr>"
-            f"<td><a href='/dashboard/agents/{_e(aid)}'>{_e(item.get('label') or aid)}</a>"
-            f"<div class='muted'>{_e(aid)} · {_e(item.get('hostname'))}</div></td>"
-            f"<td>{_state_pill(item.get('presence'))}</td>"
-            f"<td>{_state_pill(item.get('current_audit_status'))}</td>"
-            f"<td>{_e(a.get('persistent_service_count', 0))} persistent"
-            f"<div class='muted'>{_e(a.get('healthy_count', 0))} healthy / "
-            f"{_e(a.get('warning_count', 0))} warn / "
-            f"{_e(a.get('failing_count', 0))} fail / "
-            f"{_e(a.get('error_count', 0))} error</div></td>"
+            f"<td class='agent-cell'><a href='/dashboard/agents/{_e(aid)}'>{_e(label)}</a>"
+            f"<div class='id'>{_e(form)} · {_e(aid if aid != label else host or aid)}</div></td>"
+            f"<td>{_state_pill(item.get('presence'), kind='presence')}</td>"
+            f"<td>{_state_pill(item.get('current_audit_status') or (item.get('current_audit') or {}).get('status'))}</td>"
+            f"<td class='services-cell'>{_e(persist)} services"
+            f"<div class='muted'>{_e(healthy)} healthy · {_e(warn_n)} warn</div></td>"
             f"<td>{_e(a.get('alert_count', 0))}</td>"
-            f"<td>{_e(item.get('current_audit_occurred_at') or '—')}</td>"
-            f"<td>{_e(item.get('last_heartbeat') or '—')}</td>"
-            f"<td>{_e(item.get('software_version') or '—')} · proto {_e(item.get('protocol_version'))} {_e(warn)} {_e(gap)}</td>"
+            f"<td>{relative_time_html(item.get('current_audit_occurred_at'))}</td>"
             "</tr>"
         )
+        rows.append(row)
+        cards_mobile.append(
+            f"<article class='stack-card panel'><a href='/dashboard/agents/{_e(aid)}'><strong>{_e(label)}</strong></a>"
+            f"<div class='muted'>{_e(form)}</div><p>{_state_pill(item.get('presence'), kind='presence')} "
+            f"{_state_pill(item.get('current_audit_status') or (item.get('current_audit') or {}).get('status'))}</p>"
+            f"<p class='muted'>{_e(persist)} services · {_e(a.get('alert_count', 0))} alerts · "
+            f"{relative_time_html(item.get('current_audit_occurred_at'))}</p></article>"
+        )
     table = (
-        "<div class='panel'><div class='panel-head'><h2>Agents</h2></div>"
-        "<div class='table-wrap'><table><thead><tr>"
-        "<th>Agent</th><th>Presence</th><th>Audit</th><th>Persistent services</th>"
-        "<th>Alerts</th><th>Last audit</th><th>Last heartbeat</th><th>Software</th>"
+        "<div class='panel'><div class='panel-head'><h2>Agents</h2>"
+        "<a href='/dashboard/agents'>View all</a></div>"
+        "<div class='table-wrap desktop-table'><table><thead><tr>"
+        "<th>Agent</th><th>Presence</th><th>Assurance</th><th>Services</th>"
+        "<th>Alerts</th><th>Last audit</th>"
         "</tr></thead><tbody>"
-        + ("".join(rows) if rows else "<tr><td colspan='8' class='muted'>No agents</td></tr>")
-        + "</tbody></table></div></div>"
+        + ("".join(rows) if rows else "<tr><td colspan='6' class='muted empty'>No agents enrolled yet.</td></tr>")
+        + "</tbody></table></div>"
+        + "".join(cards_mobile)
+        + "</div>"
     )
     matched = int(agents.get("matched") or 0)
     off = int(agents.get("offset") or 0)
@@ -874,10 +1012,10 @@ def page_fleet(
         f'<p class="muted" style="margin-top:-.35rem">Overview of your backup environment.</p>'
         f"{cards}{filters}{table}{pager}"
     )
-    return _layout("Fleet", body, csrf=csrf, active="fleet", subtitle="")
+    return _layout("Fleet overview", body, csrf=csrf, active=active, subtitle="", chrome=chrome)
 
 
-def page_agent(detail: dict[str, Any], *, csrf: str) -> str:
+def page_agent(detail: dict[str, Any], *, csrf: str, chrome: dict[str, Any] | None = None) -> str:
     ident = detail.get("identity") or {}
     audit = detail.get("current_audit") or {}
     assurance = detail.get("assurance") or {}
@@ -905,10 +1043,11 @@ def page_agent(detail: dict[str, Any], *, csrf: str) -> str:
         for ev in (detail.get("recent_history") or [])
     )
     aid = str(ident.get("agent_id") or "")
-    svc_rows = []
+    project_sections = []
     for project in assurance.get("projects") or []:
         if not isinstance(project, dict):
             continue
+        svc_rows = []
         for service in project.get("services") or []:
             if not isinstance(service, dict):
                 continue
@@ -921,38 +1060,56 @@ def page_agent(detail: dict[str, Any], *, csrf: str) -> str:
             ) or "none"
             svc_rows.append(
                 "<tr>"
-                f"<td><a href='{href}'>{_e(name)}</a>"
-                f"<div class='muted'>{_e(project.get('name'))}</div></td>"
-                f"<td>{_e(persist)}</td>"
+                f"<td><a href='{href}'>{_e(name)}</a></td>"
+                f"<td><span class='path' title='{_e(persist)}'>{_e(persist)}</span></td>"
                 f"<td>{_state_pill(service.get('coverage'))}</td>"
                 f"<td>{_state_pill(service.get('freshness'))}</td>"
-                f"<td>{_state_pill(service.get('integrity'))}</td>"
-                f"<td>{_state_pill(service.get('restore'))}</td>"
                 f"<td>{_state_pill(service.get('overall'))}</td>"
                 "</tr>"
             )
+        if not svc_rows:
+            continue
+        pname = str(project.get("name") or "project")
+        project_sections.append(
+            f"<section class='project-block'>"
+            f"<h3>{_e(pname)}</h3>"
+            "<div class='panel'><div class='table-wrap'><table><thead><tr>"
+            "<th>Service</th><th>Persistent data</th><th>Coverage</th>"
+            "<th>Freshness</th><th>Overall</th>"
+            f"</tr></thead><tbody>{''.join(svc_rows)}</tbody></table></div></div></section>"
+        )
     empty = assurance.get("empty_reason")
-    if not svc_rows:
+    fleet_only = is_fleet_only(caps if isinstance(caps, dict) else None)
+    if not project_sections:
         reason = empty or "No Compose services in the latest audit payload"
-        svc_body = f"<tr><td colspan='7' class='muted'>{_e(reason)}</td></tr>"
+        if fleet_only:
+            svc_body = (
+                "<div class='banner-info' role='status'>"
+                "<strong>Fleet-only capabilities.</strong> This agent reports heartbeats "
+                "but local Docker discovery and Restic checks are unavailable in this deployment. "
+                "That is expected — not a FAIL."
+                f"<p class='muted'>{_e(reason)}</p></div>"
+            )
+        else:
+            svc_body = f"<div class='empty'>{_e(reason)}</div>"
     else:
-        svc_body = "".join(svc_rows)
+        svc_body = "".join(project_sections)
     alert_rows = "".join(
         "<tr>"
-        f"<td>{_e(al.get('occurred_at'))}</td>"
+        f"<td>{relative_time_html(al.get('occurred_at'))}</td>"
         f"<td>{_e(al.get('project'))}</td>"
         f"<td><a href='{_service_href(aid, al.get('project'), al.get('service'), mount=al.get('mount'))}'>{_e(al.get('service'))}</a></td>"
-        f"<td>{_e(al.get('mount'))}</td>"
+        f"<td><span class='path' title='{_e(al.get('mount'))}'>{_e(al.get('mount'))}</span></td>"
         f"<td>{_e(al.get('check'))}</td>"
         f"<td>{_state_pill(al.get('state'))}</td>"
-        f"<td>{_e(al.get('reason'))}</td>"
+        f"<td>{warn_reason_html(al.get('state'), al.get('reason')) or _e(al.get('reason'))}</td>"
         "</tr>"
         for al in (assurance.get("alerts") or [])
         if isinstance(al, dict)
     )
     trans = "".join(
         "<tr>"
-        f"<td>{_e(ch.get('occurred_at'))}</td>"
+        f"<td>{relative_time_html(ch.get('occurred_at'))}</td>"
         f"<td>{_e(ch.get('object'))}</td>"
         f"<td>{_e(ch.get('service') or ch.get('check'))}</td>"
         f"<td>{_state_pill(ch.get('from'))} → {_state_pill(ch.get('to'))}</td>"
@@ -970,28 +1127,29 @@ def page_agent(detail: dict[str, Any], *, csrf: str) -> str:
     integ = assurance.get("integrity") or {}
     restore = assurance.get("restore_verification") or {}
     repo = assurance.get("repository") or {}
+    form = deployment_form_label(
+        (caps.get("deployment_form") if isinstance(caps, dict) else None)
+        or detail.get("deployment_form")
+    )
+    version = detail.get("software_version") or ident.get("software_version") or ""
     title = str(ident.get("label") or ident.get("agent_id") or "Agent")
     body = f"""
 <h1>{_e(ident.get('label') or ident.get('agent_id'))}</h1>
-<p class="muted">{_e(ident.get('agent_id'))} · host {_e(ident.get('hostname'))} · registry {_e(ident.get('registry_status'))}</p>
+<p class="muted">{_state_pill(detail.get('presence'), kind='presence')} · {_e(form)}
+ · BackupLint {_e(version or '—')} · Last heartbeat {relative_time_html(detail.get('last_heartbeat'))}</p>
 <div class="cards">
-  <div class="card"><div class="n">{_state_pill(detail.get('presence'))}</div><div class="l">Presence</div></div>
-  <div class="card"><div class="n">{_state_pill(audit.get('status'))}</div><div class="l">Current audit</div></div>
+  <div class="card"><div class="n">{_state_pill(audit.get('status'))}</div><div class="l">Assurance</div></div>
   <div class="card"><div class="n">{_e(assurance.get('persistent_service_count', 0))}</div><div class="l">Persistent services</div></div>
   <div class="card"><div class="n">{_e(len(assurance.get('alerts') or []))}</div><div class="l">Active alerts</div></div>
+  <div class="card"><div class="n">{_state_pill((assurance.get('repository') or {}).get('state'))}</div><div class="l">Repository</div></div>
 </div>
 <div class="panel" style="margin-top:.85rem">
-<p>Last heartbeat: {_e(detail.get('last_heartbeat') or 'never')} · Last received: {_e(detail.get('last_received_at') or '—')}</p>
-<p>Current audit occurred_at: {_e(audit.get('occurred_at') or '—')} (independent of presence)</p>
 <p>Policy: {policy_note}</p>
-<p class="muted">{_e(repo.get('note'))}</p>
+<p class="muted">Coverage is per mount. Integrity and restore are repository-scoped.</p>
 </div>
-<h2>Service assurance</h2>
-<p class="muted">Coverage is per mount. Integrity and restore are repository-scoped — NOT RUN means the check was not performed. PASS is never shown for a check that did not run.</p>
-<div class="panel"><div class="table-wrap"><table><thead><tr>
-<th>Service</th><th>Persistent data</th><th>Coverage</th><th>Freshness</th><th>Integrity</th><th>Restore</th><th>Overall</th>
-</tr></thead><tbody>{svc_body}</tbody></table></div></div>
-<h2>Repository integrity / restore</h2>
+<h2>Services by project</h2>
+{svc_body}
+<h2>Repository assurance</h2>
 <div class="cards">
   <div class="card"><div class="n">{_state_pill(integ.get('state'))}</div><div class="l">Integrity ({_e(integ.get('mode') or 'not run')})</div></div>
   <div class="card"><div class="n">{_state_pill(restore.get('state'))}</div><div class="l">Restore verification</div></div>
@@ -1001,24 +1159,24 @@ def page_agent(detail: dict[str, Any], *, csrf: str) -> str:
 <h2>Attributed alerts</h2>
 <div class="panel"><div class="table-wrap"><table><thead><tr>
 <th>When</th><th>Project</th><th>Service</th><th>Mount</th><th>Check</th><th>State</th><th>Reason</th>
-</tr></thead><tbody>{alert_rows or "<tr><td colspan='7' class='muted'>No object-level alerts</td></tr>"}</tbody></table></div></div>
+</tr></thead><tbody>{alert_rows or "<tr><td colspan='7' class='muted empty'>No object-level alerts</td></tr>"}</tbody></table></div></div>
 <h2>Recent state changes</h2>
 <p class="muted">Derived from stored audit.completed payloads only. Presence and policy transitions are not invented.</p>
 <div class="panel"><div class="table-wrap"><table><thead><tr>
 <th>When</th><th>Object</th><th>Service / check</th><th>Change</th>
-</tr></thead><tbody>{trans or "<tr><td colspan='4' class='muted'>No persisted transitions in the last 25 audits</td></tr>"}</tbody></table></div></div>
+</tr></thead><tbody>{trans or "<tr><td colspan='4' class='muted empty'>No persisted transitions in the last 25 audits</td></tr>"}</tbody></table></div></div>
 <h2>Latest by check type</h2>
 <div class="panel"><div class="table-wrap"><table><thead><tr><th>Check</th><th>Status</th><th>Occurred</th><th>Received</th><th>Summary</th></tr></thead>
 <tbody>{_latest_check_rows(detail.get('latest_by_check_type') or {})}</tbody></table></div></div>
 <h2>Capabilities</h2>
-<p class="muted">NOT_INSTALLED / UNSUPPORTED / UNAVAILABLE are not FAIL.</p>
+<p class="muted">Unavailable families are not FAIL.</p>
 <div class="panel"><div class="table-wrap"><table><thead><tr><th>Family</th><th>Installed</th><th>Supported</th><th>Available</th><th>Reason</th></tr></thead>
-<tbody>{cap_rows or "<tr><td colspan='5' class='muted'>No capabilities reported</td></tr>"}</tbody></table></div></div>
+<tbody>{cap_rows or "<tr><td colspan='5' class='muted empty'>No capabilities reported</td></tr>"}</tbody></table></div></div>
 <h2>Recent history</h2>
 <div class="panel"><div class="table-wrap"><table><thead><tr><th>Occurred</th><th>Type</th><th>Status</th><th>Summary</th><th>Received</th></tr></thead>
-<tbody>{hist or "<tr><td colspan='5' class='muted'>No events</td></tr>"}</tbody></table></div></div>
+<tbody>{hist or "<tr><td colspan='5' class='muted empty'>No events</td></tr>"}</tbody></table></div></div>
 """
-    return _layout(title, body, csrf=csrf, active="fleet")
+    return _layout(title, body, csrf=csrf, active="agents", chrome=chrome)
 
 
 def json_safe_policy(policy: dict[str, Any]) -> str:
@@ -1032,6 +1190,7 @@ def page_service(
     *,
     csrf: str,
     highlight_mount: str | None = None,
+    chrome: dict[str, Any] | None = None,
 ) -> str:
     ident = detail.get("identity") or {}
     service = detail.get("service") or {}
@@ -1050,17 +1209,13 @@ def page_service(
         cls = " class='mount-focus'" if focus else ""
         mounts.append(
             f"<tr id='mount-{_e(row_id)}'{cls}>"
-            f"<td>{_e(mount.get('host_path') or mount.get('id'))}</td>"
-            f"<td>{_e(mount.get('target'))}</td>"
-            f"<td>{_e(mount.get('type'))} / {_e(mount.get('storage_class') or '—')}</td>"
-            f"<td>{_e('yes' if mount.get('expected_backed_up') else 'no')}</td>"
-            f"<td>{_e(mount.get('covered_by') or '—')}</td>"
+            f"<td><span class='path' title='{_e(mount.get('host_path') or mount.get('id'))}'>{_e(mount.get('host_path') or mount.get('id'))}</span></td>"
+            f"<td>{_e(mount.get('type') or 'bind')}</td>"
             f"<td>{_state_pill(mount.get('coverage'))}</td>"
             f"<td>{_state_pill(mount.get('freshness'))}"
-            f"<div class='muted'>{_e(mount.get('last_snapshot') or mount.get('freshness_detail') or '')}</div></td>"
-            f"<td>{_state_pill(mount.get('integrity'))} <span class='muted'>({_e(mount.get('integrity_scope'))})</span></td>"
-            f"<td>{_state_pill(mount.get('restore'))} <span class='muted'>({_e(mount.get('restore_scope'))})</span></td>"
-            f"<td>{_e(mount.get('detail'))}</td>"
+            f"{warn_reason_html(mount.get('freshness'), mount.get('freshness_detail') or mount.get('detail'), last_snapshot=mount.get('last_snapshot'))}</td>"
+            f"<td>{relative_time_html(mount.get('last_snapshot'))}</td>"
+            f"<td>{_e(mount.get('detail') or '')}</td>"
             "</tr>"
         )
     hist = "".join(
@@ -1076,26 +1231,28 @@ def page_service(
     body = f"""
 <p class="muted"><a href="/dashboard/agents/{_e(aid)}">← {_e(aid)}</a></p>
 <h1>{_e(name)}</h1>
-<p class="muted">Compose project {_e(service.get('project'))} · image {_e(service.get('image') or 'not in audit payload')}</p>
+<p class="muted">Project {_e(service.get('project'))} · service {_e(name)} · image {_e(service.get('image') or 'not in audit payload')}</p>
 <div class="cards">
+  <div class="card"><div class="n">{_state_pill(service.get('overall'))}</div><div class="l">Overall assurance</div></div>
   <div class="card"><div class="n">{_state_pill(service.get('coverage'))}</div><div class="l">Coverage</div></div>
   <div class="card"><div class="n">{_state_pill(service.get('freshness'))}</div><div class="l">Freshness</div></div>
-  <div class="card"><div class="n">{_state_pill(service.get('integrity'))}</div><div class="l">Integrity (repository)</div></div>
-  <div class="card"><div class="n">{_state_pill(service.get('restore'))}</div><div class="l">Restore (repository)</div></div>
-  <div class="card"><div class="n">{_state_pill(service.get('overall'))}</div><div class="l">Overall</div></div>
+</div>
+<h2>Mounts and volumes</h2>
+<p class="muted">Each persistent location is listed separately. Repository integrity and restore are not per-mount.</p>
+<div class="panel"><div class="table-wrap"><table><thead><tr>
+<th>Mount / volume</th><th>Type</th><th>Coverage</th><th>Freshness</th><th>Last backup</th><th>Reason</th>
+</tr></thead><tbody>{"".join(mounts) or "<tr><td colspan='6' class='muted empty'>No mounts recorded</td></tr>"}</tbody></table></div></div>
+<h2>Repository assurance</h2>
+<div class="cards">
+  <div class="card"><div class="n">{_state_pill(integ.get('state') or service.get('integrity'))}</div><div class="l">Standard integrity</div></div>
+  <div class="card"><div class="n">{_state_pill(restore.get('state') or service.get('restore'))}</div><div class="l">Restore verification</div></div>
 </div>
 <p class="muted">{_e(integ.get('message') or '')} {_e(restore.get('message') or restore.get('snapshot_id') or '')}</p>
-<h2>Mounts and volumes</h2>
-<p class="muted">Each persistent location is listed separately. Integrity/restore are not per-mount unless a finding named the path.</p>
-<div class="panel"><div class="table-wrap"><table><thead><tr>
-<th>Host path / volume</th><th>Target</th><th>Type</th><th>Expected backup</th>
-<th>Covered by</th><th>Coverage</th><th>Freshness</th><th>Integrity</th><th>Restore</th><th>Reason</th>
-</tr></thead><tbody>{"".join(mounts) or "<tr><td colspan='10' class='muted'>No mounts recorded</td></tr>"}</tbody></table></div></div>
 <h2>Recent service state changes</h2>
 <div class="panel"><div class="table-wrap"><table><thead><tr><th>When</th><th>Change</th></tr></thead>
-<tbody>{hist or "<tr><td colspan='2' class='muted'>No persisted transitions for this service</td></tr>"}</tbody></table></div></div>
+<tbody>{hist or "<tr><td colspan='2' class='muted empty'>No persisted transitions for this service</td></tr>"}</tbody></table></div></div>
 """
-    return _layout(name, body, csrf=csrf, active="fleet")
+    return _layout(name, body, csrf=csrf, active="agents", chrome=chrome)
 
 
 def _latest_check_rows(latest: dict[str, Any]) -> str:
@@ -1127,6 +1284,7 @@ def page_history(
     *,
     csrf: str,
     qs: dict[str, list[str]],
+    chrome: dict[str, Any] | None = None,
 ) -> str:
     agent_id = (qs.get("agent_id") or [""])[0]
     event_type = (qs.get("event_type") or [""])[0]
@@ -1198,7 +1356,7 @@ def page_history(
 <tbody>{rows or "<tr><td colspan='6' class='muted'>No events</td></tr>"}</tbody></table></div></div>
 {pager}
 """
-    return _layout("History", body, csrf=csrf, active="history")
+    return _layout("History", body, csrf=csrf, active="history", chrome=chrome)
 
 
 def page_policy(
@@ -1208,6 +1366,7 @@ def page_policy(
     audit: dict[str, Any],
     *,
     csrf: str,
+    chrome: dict[str, Any] | None = None,
 ) -> str:
     policy_rows = ""
     for item in policies.get("items") or []:
@@ -1276,9 +1435,103 @@ def page_policy(
 <th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Result</th><th>New ref</th>
 </tr></thead><tbody>{audit_rows or "<tr><td colspan='6' class='muted'>No audit records</td></tr>"}</tbody></table></div></div>
 """
-    return _layout("Policy", body, csrf=csrf, active="policy")
+    return _layout("Policy", body, csrf=csrf, active="policy", chrome=chrome)
+
+
+def page_agents(
+    overview: dict[str, Any],
+    agents: dict[str, Any],
+    *,
+    csrf: str,
+    qs: dict[str, list[str]],
+    chrome: dict[str, Any] | None = None,
+) -> str:
+    inner = page_fleet(
+        overview,
+        agents,
+        alerts={"items": []},
+        trend={"buckets": []},
+        window={"time_range": (qs.get("time_range") or ["24h"])[0]},
+        csrf=csrf,
+        qs=qs,
+        chrome=chrome,
+        active="agents",
+    )
+    return inner.replace("<h1>Fleet overview</h1>", "<h1>Agents</h1>", 1)
+
+
+def page_alerts(
+    alerts: dict[str, Any],
+    *,
+    csrf: str,
+    qs: dict[str, list[str]],
+    chrome: dict[str, Any] | None = None,
+) -> str:
+    status = (qs.get("status") or ["all"])[0] or "all"
+    chips = []
+    for value, label in (
+        ("all", "All"),
+        ("FAIL", "FAIL"),
+        ("ERROR", "ERROR"),
+        ("WARN", "WARN"),
+    ):
+        cls = "chip active" if status.lower() == value.lower() else "chip"
+        href = "/dashboard/alerts" if value == "all" else f"/dashboard/alerts?status={value}"
+        chips.append(f"<a class='{cls}' href='{_e(href)}'>{_e(label)}</a>")
+    items = list(alerts.get("items") or [])
+    if status and status.lower() != "all":
+        items = [
+            it
+            for it in items
+            if str(it.get("alert_kind") or it.get("status") or "").upper()
+            == status.upper()
+        ]
+    panel = _recent_alerts_panel({"items": items})
+    empty_hint = ""
+    if not items:
+        empty_hint = "<p class='empty'>No alerts match this filter.</p>"
+    body = f"""
+<h1>Alerts</h1>
+<p class="muted">FAIL, ERROR, DATA_GAP, overflow, and protocol issues. WARN coverage findings appear on agent pages.</p>
+<div class="alert-filters" role="navigation" aria-label="Alert filters">{"".join(chips)}</div>
+{panel}
+{empty_hint}
+"""
+    return _layout("Alerts", body, csrf=csrf, active="alerts", chrome=chrome)
+
+
+def page_siem(
+    status: dict[str, Any] | None,
+    *,
+    csrf: str,
+    chrome: dict[str, Any] | None = None,
+) -> str:
+    if not status:
+        body = """
+<h1>SIEM</h1>
+<div class="empty">SIEM export is not configured on this controller. Backup assurance is independent of SIEM delivery.</div>
+"""
+        return _layout("SIEM", body, csrf=csrf, active="siem", chrome=chrome)
+    health = status.get("endpoint_health") or "unknown"
+    depth = status.get("queue_depth_by_status") or {}
+    body = f"""
+<h1>SIEM</h1>
+<p class="muted">Best-effort export. A SIEM outage never changes backup audit results.</p>
+<div class="cards">
+  <div class="card"><div class="n">{_e(health)}</div><div class="l">Endpoint health</div></div>
+  <div class="card"><div class="n">{_e(depth.get('pending', 0))}</div><div class="l">Pending</div></div>
+  <div class="card"><div class="n">{_e(depth.get('delivered', 0))}</div><div class="l">Delivered</div></div>
+  <div class="card"><div class="n">{_e(status.get('failed_total', 0))}</div><div class="l">Failed attempts</div></div>
+</div>
+<div class="panel">
+<p>Last success: {relative_time_html(status.get('last_success_at'))}</p>
+<p>Last error: {_e(status.get('last_error') or 'none')} {relative_time_html(status.get('last_error_at'))}</p>
+</div>
+"""
+    return _layout("SIEM", body, csrf=csrf, active="siem", chrome=chrome)
 
 
 def _opt(value: str, selected: str) -> str:
     sel = " selected" if value == selected else ""
     return f'<option value="{_e(value)}"{sel}>{_e(value)}</option>'
+

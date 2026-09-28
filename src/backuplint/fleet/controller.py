@@ -113,7 +113,12 @@ class FleetController:
         self.dashboard_query = DashboardQueryService(
             self.store, self.dashboard_config, reader=self._dashboard_reader
         )
-        self.dashboard_http = DashboardHttp(self.dashboard_auth, self.dashboard_query)
+        self.dashboard_http = DashboardHttp(
+            self.dashboard_auth,
+            self.dashboard_query,
+            controller_hostname=hostname,
+            software_version=SOFTWARE_VERSION,
+        )
         self.siem_config = siem or SiemConfig()
         self.siem_telemetry_path = data_dir / "siem" / "telemetry.jsonl"
         self._siem_exporter = build_exporter(data_dir, self.siem_config)

@@ -93,10 +93,18 @@ the payload.
 
 ### Pages
 
-- Fleet overview: presence, audit, persistent-service counts, alert counts
-- Agent detail: `/dashboard/agents/{id}` — service table, attributed alerts, last 25 audit transitions
+- Overview (`/dashboard/`): fleet health cards, alerts, compact agents table
+- Agents (`/dashboard/agents`): presence, assurance, services, alerts, last audit (relative time)
+- Alerts (`/dashboard/alerts`): FAIL/ERROR/WARN filters and deep links
+- Policies (`/dashboard/policy`): read-only policy/drift/rollout
+- SIEM (`/dashboard/siem`): export queue health (best-effort; never backup truth)
+- System (`/dashboard/history`): bounded event history
+- Agent detail: `/dashboard/agents/{id}` — services grouped by Compose project
 - Service drill-down: `/dashboard/agents/{id}/services/{project}/{service}` (legacy `?project=` still accepted)
 - Alert links use the same project-aware URL and may include `?mount=` to highlight the failing path
+
+Status badges stay single-line (`PASS` / `WARN` / `FAIL` / `ERROR` / `NOT RUN` / `N/A`).
+Long paths use monospace wrapping; timestamps in tables are relative with a full ISO title.
 
 Infrastructure binds such as `/etc/localtime`, `/etc/timezone`, the Docker socket, and
 read-only host CA/zoneinfo mounts are classified as **infrastructure** and skipped

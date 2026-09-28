@@ -185,7 +185,9 @@ Public-safe demo fleet (synthetic labels).
 
 ![Historical assurance trends from real stored audit events.](docs/images/04-dashboard-history-trends.png)
 
-![Read-only central policy visibility with drift and rollout state.](docs/images/05-dashboard-policy.png)
+![Alerts with project/service deep links.](docs/images/06-dashboard-alerts.png)
+
+![SIEM export health is separate from backup assurance.](docs/images/08-dashboard-siem.png)
 
 ![CLI coverage plus Restic integrity and isolated restore verification.](docs/images/07-cli-coverage-integrity.png)
 

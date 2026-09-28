@@ -70,6 +70,8 @@ creates `/state/siem/` for the durable queue and telemetry.
 
 - Bearer token via `SecretRef` (`env`, `file`, `systemd`, `mounted`) — never inline secrets
 - TLS verification on by default (`tls.verify: true`)
+- `tls.verify: false` disables certificate verification **for the SIEM HTTPS destination only** (lab/self-signed collectors). It does not affect controller or agent mTLS.
+- Optional `tls.ca_file` trusts a private CA when `tls.verify: true`
 - Tokens resolved at send time (rotation without controller restart)
 - `/v1/siem/status` requires client certificate (same tier as `/v1/metrics`)
 
