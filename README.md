@@ -12,6 +12,8 @@ BackupLint is an independent **backup-assurance** layer for Docker Compose stack
 
 It is **not** a backup engine. It does not replace Restic, Borg, Kopia, or your backup jobs. For v1, **Restic is the only supported engine** when engine-backed checks are enabled. It does not SSH into hosts, delete data, or restore over live application files.
 
+**New to BackupLint? Start with the [User Guide](docs/user-guide.md).**
+
 ```text
 coverage ≠ integrity ≠ restore verification ≠ disaster recovery
 presence (online / stale / offline) ≠ audit health
@@ -42,7 +44,7 @@ Details: [docs/installation.md](docs/installation.md), [docs/installation-profil
 
 ## 60-second local check (standalone)
 
-1. Install the release wheel (see [Native install](#native--bare-metal-install)).
+1. Install with `pip install backuplint` (see [Native install](#native--bare-metal-install)).
 2. Create `backuplint.yml` next to your Compose file:
 
 ```yaml
@@ -83,7 +85,7 @@ BackupLint does **not** require one broad privileged “admin account”. You su
 - Expected backup paths
 - Docker Engine + Compose plugin access when Compose discovery is used
 - Restic repository location for Restic-backed checks
-- Restic password via `password_file`, `RESTIC_PASSWORD`, or `RESTIC_PASSWORD_FILE` (`password_file` always wins). Passwords are never printed.
+- Restic password via `restic.password` (SecretRef), `password_file`, then ambient `RESTIC_PASSWORD` / `RESTIC_PASSWORD_FILE`. Configured sources win over ambient env. Passwords are never printed. See [docs/secrets.md](docs/secrets.md).
 
 ### Controller
 
@@ -115,14 +117,14 @@ Revoke with `backuplint controller revoke <agent_id>`.
 
 Python **3.11+** (`venv`). Rocky/Alma 9: use `python3.11`. Docker Engine + Compose plugin for `scan`. Restic on `PATH` only if you enable engine-backed checks.
 
-Download `backuplint-1.0.0-py3-none-any.whl` from the [v1.0.0 GitHub Release](https://github.com/Netryon/BackupLint/releases/tag/v1.0.0), then:
-
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install backuplint-1.0.0-py3-none-any.whl
+pip install backuplint
 backuplint --version
 ```
+
+Alternatively, download `backuplint-1.0.0-py3-none-any.whl` from the [v1.0.0 GitHub Release](https://github.com/Netryon/BackupLint/releases/tag/v1.0.0) and `pip install` that file.
 
 Interactive native installer (directories, optional packages, systemd):
 
@@ -232,6 +234,7 @@ Container images: digest-pinned `python:3.12-slim-bookworm`, Trivy-reviewed, res
 
 | Topic | Doc |
 | --- | --- |
+| Beginner user guide | [docs/user-guide.md](docs/user-guide.md) |
 | Native install | [docs/installation.md](docs/installation.md) |
 | Native installer / systemd | [docs/native-installer.md](docs/native-installer.md) |
 | Docker | [docs/docker.md](docs/docker.md) |

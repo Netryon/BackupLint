@@ -40,6 +40,6 @@ See [architecture.md](architecture.md). Tests treat a missing repository as oper
 
 ## Artifacts
 
-Wheel, sdist, and `SHA256SUMS` for this release are on the private [v1.0.0 GitHub Release](https://github.com/Netryon/BackupLint/releases/tag/v1.0.0). PyPI and GHCR remain unpublished until the owner publishes them. Treat any other locally built artifacts as unofficial.
+Wheel, sdist, and `SHA256SUMS` for this release are on the public [v1.0.0 GitHub Release](https://github.com/Netryon/BackupLint/releases/tag/v1.0.0). Install from [PyPI](https://pypi.org/project/backuplint/1.0.0/) (`backuplint==1.0.0`) or pull `ghcr.io/netryon/backuplint-controller:1.0.0` and `ghcr.io/netryon/backuplint-agent:1.0.0`. Treat any other locally built artifacts as unofficial.
 
 CI on `main` does not write repository secrets to logs.

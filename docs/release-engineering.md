@@ -1,15 +1,14 @@
 # Release engineering (local rebuilds)
 
-This document describes how to reproduce **local BackupLint 1.0.0** artifacts. The repository already has a private `v1.0.0` tag and GitHub Release; do not create additional public tags or registry publications without owner approval.
+This document describes how to reproduce **local BackupLint 1.0.0** artifacts. Official `v1.0.0` is already on the public GitHub Release, [PyPI](https://pypi.org/project/backuplint/1.0.0/), and GHCR. Do not create additional public tags or republish artifacts without owner approval.
 
 ## Hard rules
 
 ```text
-No PyPI publication
-No change of repository visibility
-No extra public GitHub Release
-No extra final release tag
-No container registry push
+Do not republish PyPI 1.0.0
+Do not change repository visibility
+Do not create extra public GitHub Releases or final tags
+Do not push replacement GHCR images
 without explicit owner approval
 ```
 

@@ -4,17 +4,25 @@ BackupLint is one Python package. Choose a **role** (standalone, agent, controll
 
 Python **3.11+** with `venv` is required. Rocky/Alma 9 should use `python3.11`. [Restic](https://restic.net/) is required on `PATH` only when you enable engine-backed coverage, integrity, or restore verification. Docker Engine plus the Compose plugin (`docker compose`) is required for `backuplint scan`.
 
-## Install from a release wheel (recommended)
-
-Download `backuplint-1.0.0-py3-none-any.whl` from the
-[v1.0.0 GitHub Release](https://github.com/Netryon/BackupLint/releases/tag/v1.0.0).
+## Install from PyPI (recommended)
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
-pip install backuplint-1.0.0-py3-none-any.whl
+pip install backuplint
 backuplint --version   # backuplint 1.0.0
+```
+
+Package page: [https://pypi.org/project/backuplint/](https://pypi.org/project/backuplint/).
+
+### Install from a GitHub Release wheel
+
+Download `backuplint-1.0.0-py3-none-any.whl` from the
+[v1.0.0 GitHub Release](https://github.com/Netryon/BackupLint/releases/tag/v1.0.0).
+
+```bash
+pip install backuplint-1.0.0-py3-none-any.whl
 ```
 
 Then provision with the native installer if you want systemd and system directories:

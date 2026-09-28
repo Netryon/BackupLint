@@ -1,6 +1,6 @@
 # BackupLint v1.0.0 release notes
 
-In-tree notes for the `1.0.0` package. The GitHub Release for tag `v1.0.0` is the canonical artifact list and checksums. PyPI and GHCR publication remain owner-controlled.
+In-tree notes for the `1.0.0` package. The GitHub Release for tag `v1.0.0` is the canonical artifact list and checksums. The same version is published on [PyPI](https://pypi.org/project/backuplint/1.0.0/) and as GHCR controller/agent images.
 
 ## What BackupLint is
 
