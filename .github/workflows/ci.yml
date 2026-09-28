@@ -55,5 +55,6 @@ jobs:
         env:
           NO_COLOR: "1"
         run: |
+          pip install -e ".[browser]"
           python -m playwright install --with-deps chromium
           pytest -q tests/browser
