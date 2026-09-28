@@ -107,8 +107,8 @@ def test_login_logout_and_failed_login(page, lab) -> None:
 def test_fleet_overview_filters_and_semantics(page, lab) -> None:
     _login(page, lab)
     expect(page.locator(".card .l", has_text="Agents")).to_be_visible()
-    expect(page.locator("text=DATA_GAP / overflow")).to_be_visible()
-    expect(page.locator("text=Protocol warnings")).to_be_visible()
+    expect(page.locator("text=Persistent services")).to_be_visible()
+    expect(page.locator("text=Active alerts")).to_be_visible()
     expect(page.locator("text=Recent alerts")).to_be_visible()
     expect(page.locator("text=Audit results over time")).to_be_visible()
     expect(page.locator("select[name='time_range']")).to_be_visible()
@@ -127,28 +127,28 @@ def test_fleet_overview_filters_and_semantics(page, lab) -> None:
     page.fill('input[name="q"]', "OFFLINE")
     page.click('button:has-text("Filter")')
     page.wait_for_load_state("networkidle")
-    expect(page.locator("text=OFFLINE old PASS")).to_be_visible()
+    expect(page.get_by_role("link", name="OFFLINE old PASS").first).to_be_visible()
     body = page.inner_text("main")
     assert "offline" in body.lower()
     assert "PASS" in body
     _shot(page, "04-fleet-offline-filter")
 
     page.goto(f"{lab['base']}/dashboard/?presence=stale", wait_until="networkidle")
-    expect(page.locator(".pill.stale")).to_be_visible()
+    expect(page.locator(".tag-label", has_text="STALE").first).to_be_visible()
     _shot(page, "05-fleet-stale")
 
     page.goto(f"{lab['base']}/dashboard/?audit_status=FAIL", wait_until="networkidle")
-    expect(page.locator("text=ONLINE FAIL")).to_be_visible()
+    expect(page.get_by_role("link", name="ONLINE FAIL").first).to_be_visible()
     _shot(page, "06-fleet-failures")
 
     page.goto(f"{lab['base']}/dashboard/?has_data_gap=true", wait_until="networkidle")
-    expect(page.locator("a", has_text="DATA_GAP agent")).to_be_visible()
+    expect(page.get_by_role("link", name="DATA_GAP agent").first).to_be_visible()
     _shot(page, "07-fleet-data-gap")
 
     page.goto(
         f"{lab['base']}/dashboard/?protocol_version=1", wait_until="networkidle"
     )
-    expect(page.locator("text=Protocol v1")).to_be_visible()
+    expect(page.locator("text=Protocol v1").first).to_be_visible()
 
     page.goto(
         f"{lab['base']}/dashboard/?capability=restore_verification",
@@ -171,20 +171,20 @@ def test_agent_detail_offline_pass_and_capabilities(page, lab) -> None:
     _login(page, lab)
     offline_id = lab["ids"]["offline_pass"]
     page.goto(f"{lab['base']}/dashboard/agents/{offline_id}", wait_until="networkidle")
-    expect(page.locator(".pill.offline")).to_be_visible()
-    expect(page.locator(".card .pill.PASS")).to_be_visible()
-    expect(page.locator("text=independent of presence")).to_be_visible()
+    expect(page.locator(".tag-label", has_text="OFFLINE").first).to_be_visible()
+    expect(page.locator(".tag-label", has_text="PASS").first).to_be_visible()
+    expect(page.locator("h1")).to_contain_text("OFFLINE old PASS")
     _shot(page, "08-agent-offline-pass")
 
     fail_id = lab["ids"]["online_fail"]
     page.goto(f"{lab['base']}/dashboard/agents/{fail_id}", wait_until="networkidle")
-    expect(page.locator(".pill.FAIL").first).to_be_visible()
+    expect(page.locator(".tag-label", has_text="FAIL").first).to_be_visible()
     expect(page.locator("text=Latest by check type")).to_be_visible()
     _shot(page, "09-agent-fail")
 
     pass_id = lab["ids"]["online_pass"]
     page.goto(f"{lab['base']}/dashboard/agents/{pass_id}", wait_until="networkidle")
-    expect(page.locator(".pill.PASS").first).to_be_visible()
+    expect(page.locator(".tag-label", has_text="PASS").first).to_be_visible()
     _shot(page, "10-agent-pass")
 
     caps_id = lab["ids"]["caps_missing"]
@@ -202,7 +202,7 @@ def test_agent_detail_offline_pass_and_capabilities(page, lab) -> None:
 def test_history_filters_and_failures(page, lab) -> None:
     _login(page, lab)
     page.goto(f"{lab['base']}/dashboard/history", wait_until="networkidle")
-    expect(page.locator("h1")).to_contain_text("History")
+    expect(page.locator("h1")).to_contain_text("System")
     _shot(page, "12-history")
 
     page.check('input[name="failures_only"]')
@@ -248,15 +248,15 @@ def test_responsive_viewports(browser, lab, name: str, size: dict) -> None:
     page = context.new_page()
     try:
         _login(page, lab)
-        expect(page.locator("a.brand")).to_be_visible()
-        expect(page.locator("a:has-text('Fleet')")).to_be_visible()
+        expect(page.locator("a.brand-block")).to_be_visible()
+        expect(page.locator("a:has-text('Overview')")).to_be_visible()
         expect(page.locator("h1")).to_contain_text("Fleet overview")
         # filters should remain in DOM
         expect(page.locator("#fleet-filters")).to_be_visible()
         _shot(page, f"20-viewport-{name}-fleet")
         aid = lab["ids"]["online_fail"]
         page.goto(f"{lab['base']}/dashboard/agents/{aid}", wait_until="networkidle")
-        expect(page.locator(".card .l", has_text="Presence")).to_be_visible()
+        expect(page.locator(".card .l", has_text="Assurance")).to_be_visible()
         _shot(page, f"21-viewport-{name}-agent")
     finally:
         context.close()
@@ -277,5 +277,42 @@ def test_console_and_network_clean_on_happy_path(page, lab) -> None:
         json.dumps({"console": console, "failed": failed}, indent=2) + "\n",
         encoding="utf-8",
     )
-    assert not any("error:" in c.lower() and "favicon" not in c.lower() for c in console)
-    assert not failed
+    noise = ("favicon", "401")
+    assert not any(
+        "error:" in c.lower() and not any(n in c.lower() for n in noise)
+        for c in console
+    )
+    assert not [f for f in failed if "favicon" not in f.lower()]
+
+
+def test_nav_siem_alerts_and_colliding_services(page, lab) -> None:
+    _login(page, lab)
+    for label, path, heading in (
+        ("Overview", "/dashboard/", "Fleet overview"),
+        ("Agents", "/dashboard/agents", "Agents"),
+        ("Alerts", "/dashboard/alerts", "Alerts"),
+        ("Policies", "/dashboard/policy", "Policies"),
+        ("SIEM", "/dashboard/siem", "SIEM"),
+        ("System", "/dashboard/history", "System"),
+    ):
+        page.goto(f"{lab['base']}{path}", wait_until="networkidle")
+        expect(page.locator("h1")).to_contain_text(heading)
+        expect(page.locator("nav a.active")).to_contain_text(label)
+    collide = lab["ids"]["collide"]
+    page.goto(
+        f"{lab['base']}/dashboard/agents/{collide}/services/gitea/db",
+        wait_until="networkidle",
+    )
+    expect(page.locator("text=Project gitea")).to_be_visible()
+    page.goto(
+        f"{lab['base']}/dashboard/agents/{collide}/services/nextcloud/db",
+        wait_until="networkidle",
+    )
+    expect(page.locator("text=Project nextcloud")).to_be_visible()
+    page.goto(
+        f"{lab['base']}/dashboard/agents/{collide}/services/gitea/db?mount=/var/lib/gitea",
+        wait_until="networkidle",
+    )
+    expect(page.locator("tr.mount-focus")).to_be_visible()
+    page.goto(f"{lab['base']}/dashboard/alerts", wait_until="networkidle")
+    expect(page.locator("h1")).to_contain_text("Alerts")

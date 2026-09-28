@@ -134,6 +134,18 @@ def warn_reason_html(
     return "<div class='reason'>" + "<br/>".join(_e(p) for p in parts) + "</div>"
 
 
+def is_mount_locator(value: object) -> bool:
+    """True when *value* is a path or volume id, not a prose advisory."""
+    text = "" if value is None else str(value).strip()
+    if not text or text.lower() in {"none", "n/a", "na", "—", "-"}:
+        return False
+    if text.lower() == "database detected":
+        return False
+    if " " in text and not text.startswith("/"):
+        return False
+    return True
+
+
 def is_fleet_only(capability_summary: dict[str, Any] | None) -> bool:
     if not isinstance(capability_summary, dict):
         return False

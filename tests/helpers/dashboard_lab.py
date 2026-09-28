@@ -340,6 +340,57 @@ def populate_populated_fleet(store: ControllerStore) -> dict[str, str]:
     )
     ids["revoked"] = revoked
 
+    collide = "agent-collide00000001"
+    store.register_agent(
+        agent_id=collide, label="busy-collide", hostname="host-collide"
+    )
+    ids["collide"] = collide
+    _set_heartbeat(store, collide, now - timedelta(seconds=12))
+    _set_agent_meta(store, collide, protocol_version=PROTOCOL_VERSION, software_version="1.0.0")
+    _insert_event(
+        store,
+        agent_id=collide,
+        event_type=EventType.AUDIT_COMPLETED.value,
+        status="WARN",
+        occurred_at=_iso(now - timedelta(minutes=4)),
+        payload={
+            "findings": [
+                {
+                    "project": "gitea",
+                    "service": "db",
+                    "image": "postgres:16-alpine",
+                    "path": "/var/lib/gitea",
+                    "target": "/var/lib/postgresql/data",
+                    "type": "volume",
+                    "status": "protected",
+                    "persistent": True,
+                    "detail": "database detected",
+                },
+                {
+                    "project": "nextcloud",
+                    "service": "db",
+                    "image": "postgres:16-alpine",
+                    "path": "/var/lib/nextcloud-db",
+                    "target": "/var/lib/postgresql/data",
+                    "type": "volume",
+                    "status": "stale",
+                    "persistent": True,
+                    "detail": "database detected",
+                },
+                {
+                    "project": "miniflux",
+                    "service": "db",
+                    "image": "postgres:16-alpine",
+                    "path": "/var/lib/miniflux-db",
+                    "type": "volume",
+                    "status": "protected",
+                    "persistent": True,
+                },
+            ],
+            "summary": {"result": "WARN"},
+        },
+    )
+
     # large history on online_pass
     hist_agent = ids["online_pass"]
     for i in range(80):

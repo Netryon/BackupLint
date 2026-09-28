@@ -174,3 +174,66 @@ def test_siem_status_reads_queue_when_telemetry_missing(tmp_path) -> None:
     assert snap["endpoint_health"] == "degraded"
     assert "CERTIFICATE_VERIFY_FAILED" in str(snap["last_error"])
     assert "max-width: 18px" in _css()
+
+
+def test_mount_locator_rejects_prose() -> None:
+    from backuplint.fleet.dashboard.format import is_mount_locator
+    from backuplint.fleet.dashboard.ui import _service_href
+
+    assert is_mount_locator("/var/lib/gitea")
+    assert not is_mount_locator("database detected")
+    href = _service_href("irw-appn", "gitea", "db", mount="database detected")
+    assert href == "/dashboard/agents/irw-appn/services/gitea/db"
+    href2 = _service_href("irw-appn", "gitea", "db", mount="/var/lib/gitea")
+    assert "mount=%2Fvar%2Flib%2Fgitea" in href2
+
+
+def test_system_and_alerts_copy() -> None:
+    from backuplint.fleet.dashboard.ui import page_alerts, page_history, page_siem
+
+    hist = page_history(
+        {"items": [], "matched": 0, "returned": 0, "limit": 50, "offset": 0},
+        {"buckets": [], "totals": {"PASS": 0, "WARN": 0, "FAIL": 0, "ERROR": 0}},
+        {"time_range": "24h", "time_from": "", "time_to": ""},
+        csrf="t",
+        qs={},
+        chrome={
+            "controller_hostname": "ctrl.example",
+            "software_version": "1.0.0",
+            "online": 5,
+            "agents": 5,
+        },
+    )
+    assert "<h1>System</h1>" in hist
+    assert "History / failures" not in hist
+    alerts = page_alerts(
+        {
+            "items": [
+                {
+                    "alert_kind": "WARN",
+                    "agent_id": "irw-appn",
+                    "project": "gitea",
+                    "service": "db",
+                    "summary": "Database workload detected",
+                    "occurred_at": "2026-09-28T20:00:00+00:00",
+                }
+            ]
+        },
+        csrf="t",
+        qs={},
+    )
+    assert "Database workload detected" in alerts
+    assert "No alerts match this filter" not in alerts
+    siem = page_siem(
+        {
+            "endpoint_health": "healthy",
+            "queue_depth_by_status": {"pending": 0, "delivered": 11},
+            "failed_total": 0,
+            "last_success_at": "2026-09-28T19:00:00+00:00",
+            "last_error": None,
+            "last_error_at": "2026-09-28T18:00:00+00:00",
+        },
+        csrf="t",
+    )
+    assert "Last error: none" in siem
+    assert "18:00" not in siem

@@ -21,6 +21,7 @@ from backuplint.fleet.dashboard.assurance import (
     service_from_assurance,
 )
 from backuplint.fleet.dashboard.config import DashboardConfig
+from backuplint.fleet.dashboard.format import is_fleet_only, is_mount_locator
 from backuplint.fleet.presence import OFFLINE, ONLINE, STALE, classify_presence
 from backuplint.fleet.queue_policy import DATA_GAP_RESULT_MARKER, QUEUE_OVERFLOW_STATUS
 
@@ -250,6 +251,8 @@ def _assurance_summary(assurance: dict[str, object]) -> dict[str, object]:
         "error_count": assurance.get("error_count", 0),
         "alert_count": len(list(assurance.get("alerts") or [])),
         "empty_reason": assurance.get("empty_reason"),
+        "alerts": list(assurance.get("alerts") or [])[:12],
+        "fleet_only": bool(assurance.get("fleet_only")),
     }
 
 
@@ -464,16 +467,72 @@ class DashboardQueryService:
                     "has_data_gap": False,
                 }
             )
-        items.sort(key=lambda x: str(x.get("occurred_at") or ""), reverse=True)
-        items = items[:page]
+        items.extend(self.list_active_object_alerts(limit=page))
+        seen: set[tuple[object, ...]] = set()
+        unique: list[dict[str, object]] = []
+        for item in items:
+            key = (
+                item.get("agent_id"),
+                item.get("project"),
+                item.get("service"),
+                item.get("check"),
+                item.get("alert_kind"),
+                item.get("summary"),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(item)
+        unique.sort(key=lambda x: str(x.get("occurred_at") or ""), reverse=True)
+        unique = unique[:page]
         return {
             "schema_version": 1,
-            "items": items,
+            "items": unique,
             "limit": page,
-            "returned": len(items),
+            "returned": len(unique),
             "time_from": time_from,
             "time_to": time_to,
         }
+
+    def list_active_object_alerts(
+        self, *, limit: int | None = None, now: datetime | None = None
+    ) -> list[dict[str, object]]:
+        """Current coverage/integrity/restore findings from latest audits."""
+        page = min(MAX_RECENT_ALERTS, self._clamp_limit(limit or 30))
+        agents = self.list_agents(
+            limit=self.config.max_page_size, offset=0, now=now
+        )
+        items: list[dict[str, object]] = []
+        for agent in agents.get("items") or []:
+            if not isinstance(agent, dict):
+                continue
+            aid = agent.get("agent_id")
+            assurance = agent.get("assurance") if isinstance(agent.get("assurance"), dict) else {}
+            for alert in assurance.get("alerts") or []:
+                if not isinstance(alert, dict):
+                    continue
+                mount = alert.get("mount")
+                items.append(
+                    {
+                        "alert_kind": str(alert.get("state") or "WARN"),
+                        "event_id": None,
+                        "agent_id": aid,
+                        "event_type": "audit.completed",
+                        "status": str(alert.get("state") or "WARN"),
+                        "occurred_at": alert.get("occurred_at")
+                        or agent.get("current_audit_occurred_at"),
+                        "received_at": agent.get("last_received_at"),
+                        "summary": str(alert.get("reason") or "")[:240],
+                        "has_data_gap": False,
+                        "project": alert.get("project"),
+                        "service": alert.get("service"),
+                        "mount": mount if is_mount_locator(mount) else "",
+                        "check": alert.get("check"),
+                    }
+                )
+                if len(items) >= page:
+                    return items
+        return items
 
     def audit_status_trend(
         self,
@@ -824,6 +883,8 @@ class DashboardQueryService:
                 occurred_at=str(row[11] or "") or None,
                 audit_status=str(row[10] or "") or None,
             )
+            summary = _assurance_summary(assurance)
+            summary["fleet_only"] = is_fleet_only(caps)
             items.append(
                 {
                     "agent_id": row[0],
@@ -844,7 +905,7 @@ class DashboardQueryService:
                     },
                     "has_data_gap": gap,
                     "protocol_warning": warning,
-                    "assurance": _assurance_summary(assurance),
+                    "assurance": summary,
                 }
             )
         truncated_scan = len(rows) >= scan_cap

@@ -9,6 +9,7 @@ from urllib.parse import quote, urlencode
 from backuplint.fleet.dashboard.format import (
     deployment_form_label,
     is_fleet_only,
+    is_mount_locator,
     relative_time_html,
     status_tag,
     warn_reason_html,
@@ -55,7 +56,7 @@ def _service_href(
         path = f"/dashboard/agents/{aid}"
     else:
         return "#"
-    if mount:
+    if is_mount_locator(mount):
         path += f"?mount={quote(str(mount), safe='')}"
     return path
 
@@ -757,7 +758,7 @@ def _recent_alerts_panel(alerts: dict[str, Any]) -> str:
 <div class="panel">
   <div class="panel-head"><h2>Recent alerts</h2></div>
   <p class="muted" style="margin:0 0 .5rem;font-size:.78rem">
-    FAIL, ERROR, DATA_GAP, queue overflow, and protocol compatibility — not generic WARN.
+    Current coverage/integrity/restore findings, plus FAIL, ERROR, DATA_GAP, overflow, and protocol issues.
   </p>
   <div class="table-wrap alerts-table"><table><thead><tr>
     <th>Occurred</th><th>Agent</th><th>Kind</th><th>Type</th><th>Summary</th>
@@ -952,14 +953,31 @@ def page_fleet(
         healthy = int(a.get("healthy_count") or 0)
         warn_n = int(a.get("warning_count") or 0)
         label = item.get("label") or ident.get("label") or aid
+        fleet_only = bool(a.get("fleet_only")) or is_fleet_only(
+            item.get("capability_summary") if isinstance(item.get("capability_summary"), dict) else None
+        )
+        svc_word = "service" if persist == 1 else "services"
+        if fleet_only and persist == 0:
+            svc_cell = (
+                "Fleet-only"
+                "<div class='muted'>No local Compose/Restic — expected</div>"
+            )
+            stack_svc = "Fleet-only · no local Compose checks"
+        else:
+            svc_cell = (
+                f"{_e(persist)} {svc_word}"
+                f"<div class='muted'>{_e(healthy)} healthy · {_e(warn_n)} warn</div>"
+            )
+            stack_svc = (
+                f"{_e(persist)} {svc_word} · {_e(a.get('alert_count', 0))} alerts · "
+            )
         row = (
             "<tr>"
             f"<td class='agent-cell'><a href='/dashboard/agents/{_e(aid)}'>{_e(label)}</a>"
             f"<div class='id'>{_e(form)} · {_e(aid if aid != label else host or aid)}</div></td>"
             f"<td>{_state_pill(item.get('presence'), kind='presence')}</td>"
             f"<td>{_state_pill(item.get('current_audit_status') or (item.get('current_audit') or {}).get('status'))}</td>"
-            f"<td class='services-cell'>{_e(persist)} services"
-            f"<div class='muted'>{_e(healthy)} healthy · {_e(warn_n)} warn</div></td>"
+            f"<td class='services-cell'>{svc_cell}</td>"
             f"<td>{_e(a.get('alert_count', 0))}</td>"
             f"<td>{relative_time_html(item.get('current_audit_occurred_at'))}</td>"
             "</tr>"
@@ -969,7 +987,7 @@ def page_fleet(
             f"<article class='stack-card panel'><a href='/dashboard/agents/{_e(aid)}'><strong>{_e(label)}</strong></a>"
             f"<div class='muted'>{_e(form)}</div><p>{_state_pill(item.get('presence'), kind='presence')} "
             f"{_state_pill(item.get('current_audit_status') or (item.get('current_audit') or {}).get('status'))}</p>"
-            f"<p class='muted'>{_e(persist)} services · {_e(a.get('alert_count', 0))} alerts · "
+            f"<p class='muted'>{stack_svc}"
             f"{relative_time_html(item.get('current_audit_occurred_at'))}</p></article>"
         )
     table = (
@@ -1122,10 +1140,26 @@ def page_agent(detail: dict[str, Any], *, csrf: str, chrome: dict[str, Any] | No
     policy = detail.get("policy") or {}
     policy_note = "No effective policy recorded"
     if isinstance(policy, dict) and policy:
-        policy_note = (
-            f"revision {_e(policy.get('revision') or policy.get('policy_revision') or '—')} · "
-            f"{_e(policy.get('status') or policy.get('drift_status') or json_safe_policy(policy))}"
+        applied = policy.get("applied") if isinstance(policy.get("applied"), dict) else {}
+        desired = policy.get("desired") if isinstance(policy.get("desired"), dict) else {}
+        rev = (
+            applied.get("revision_id")
+            or desired.get("revision_id")
+            or policy.get("revision")
+            or policy.get("policy_revision")
         )
+        drift = (
+            applied.get("drift_status")
+            or policy.get("drift_status")
+            or policy.get("status")
+        )
+        if rev or drift:
+            policy_note = (
+                f"{_e(drift or 'assigned')}"
+                + (f" · revision {_e(rev)}" if rev else "")
+            )
+        else:
+            policy_note = _e(json_safe_policy(policy))
     integ = assurance.get("integrity") or {}
     restore = assurance.get("restore_verification") or {}
     repo = assurance.get("repository") or {}
@@ -1349,8 +1383,20 @@ def page_history(
             "Next</a>"
         )
     pager += "</div>"
+    chrome = chrome or {}
+    ident = _e(chrome.get("controller_hostname") or "controller")
+    ver = _e(chrome.get("software_version") or "—")
+    online = chrome.get("online")
+    agents_n = chrome.get("agents")
     body = f"""
-<h1>History / failures</h1>
+<h1>System</h1>
+<p class="muted">Controller identity and bounded event history. Secrets are never shown here.</p>
+<div class="cards">
+  <div class="card"><div class="n">{ident}</div><div class="l">Controller hostname</div></div>
+  <div class="card"><div class="n">{ver}</div><div class="l">Software version</div></div>
+  <div class="card"><div class="n">{_e(online)} / {_e(agents_n)}</div><div class="l">Agents online</div></div>
+</div>
+<h2>Event history</h2>
 <p class="muted">Bounded page · occurred_at and received_at shown separately.</p>
 {filters}
 {_audit_trend_chart(trend)}
@@ -1358,7 +1404,7 @@ def page_history(
 <tbody>{rows or "<tr><td colspan='6' class='muted'>No events</td></tr>"}</tbody></table></div></div>
 {pager}
 """
-    return _layout("History", body, csrf=csrf, active="history", chrome=chrome)
+    return _layout("System", body, csrf=csrf, active="history", chrome=chrome)
 
 
 def page_policy(
@@ -1417,7 +1463,7 @@ def page_policy(
             "</tr>"
         )
     body = f"""
-<h1>Policy</h1>
+<h1>Policies</h1>
 <span class="readonly-banner">READ ONLY</span>
 <p class="muted">Read-only view. Mutations remain CLI/controller-admin only (no dashboard writes).</p>
 <h2>Policies</h2>
@@ -1437,7 +1483,7 @@ def page_policy(
 <th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Result</th><th>New ref</th>
 </tr></thead><tbody>{audit_rows or "<tr><td colspan='6' class='muted'>No audit records</td></tr>"}</tbody></table></div></div>
 """
-    return _layout("Policy", body, csrf=csrf, active="policy", chrome=chrome)
+    return _layout("Policies", body, csrf=csrf, active="policy", chrome=chrome)
 
 
 def page_agents(
@@ -1489,15 +1535,11 @@ def page_alerts(
             == status.upper()
         ]
     panel = _recent_alerts_panel({"items": items})
-    empty_hint = ""
-    if not items:
-        empty_hint = "<p class='empty'>No alerts match this filter.</p>"
     body = f"""
 <h1>Alerts</h1>
-<p class="muted">FAIL, ERROR, DATA_GAP, overflow, and protocol issues. WARN coverage findings appear on agent pages.</p>
+<p class="muted">Current object-level findings (including WARN) plus FAIL, ERROR, DATA_GAP, overflow, and protocol issues.</p>
 <div class="alert-filters" role="navigation" aria-label="Alert filters">{"".join(chips)}</div>
 {panel}
-{empty_hint}
 """
     return _layout("Alerts", body, csrf=csrf, active="alerts", chrome=chrome)
 
@@ -1526,8 +1568,10 @@ def page_siem(
   <div class="card"><div class="n">{_e(status.get('failed_total', 0))}</div><div class="l">Failed attempts</div></div>
 </div>
 <div class="panel">
-<p>Last success: {relative_time_html(status.get('last_success_at'))}</p>
-<p>Last error: {_e(status.get('last_error') or 'none')} {relative_time_html(status.get('last_error_at'))}</p>
+<p>Last success: {relative_time_html(status.get('last_success_at')) or '—'}</p>
+<p>Last error: {_e(status.get('last_error')) or 'none'}{
+    (' ' + relative_time_html(status.get('last_error_at'))) if status.get('last_error') else ''
+}</p>
 </div>
 """
     return _layout("SIEM", body, csrf=csrf, active="siem", chrome=chrome)
