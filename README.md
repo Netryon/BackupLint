@@ -14,6 +14,8 @@ It is **not** a backup engine. It does not replace Restic, Borg, Kopia, or your 
 
 **New to BackupLint? Start with the [User Guide](docs/user-guide.md).**
 
+If you have one Docker Compose host, start with **Standalone**. The first configuration-only coverage check needs Docker Engine + Compose and a `backuplint.yml`; it does **not** require Restic, a controller, agents, the dashboard, SIEM, or fleet setup.
+
 ```text
 coverage ≠ integrity ≠ restore verification ≠ disaster recovery
 presence (online / stale / offline) ≠ audit health
@@ -44,6 +46,8 @@ Details: [docs/installation.md](docs/installation.md), [docs/installation-profil
 
 ## 60-second local check (standalone)
 
+This first run compares the persistent paths Compose declares with the paths you say your backup job covers. It is useful for catching missing coverage, but by itself it does **not** prove that a backup actually ran, that a Restic repository is healthy, or that data can be restored.
+
 1. Install with `pip install backuplint` (see [Native install](#native--bare-metal-install)).
 2. Create `backuplint.yml` next to your Compose file:
 
@@ -69,6 +73,16 @@ BackupLint Audit
 
 Result: FAIL
 ```
+
+If `/srv/vaultwarden` should be protected, first add it (or an appropriate parent) to your **real backup job**, then make `backup_paths` reflect that reality:
+
+```yaml
+backup_paths:
+  - /srv/docker
+  - /srv/vaultwarden
+```
+
+Run the scan again. A coverage PASS means the Compose paths and declared backup roots now agree. For stronger evidence that backups actually exist and are usable, add the optional Restic-backed snapshot, integrity, and isolated restore-verification checks described in the [User Guide](docs/user-guide.md).
 
 ### Want fleet management?
 
@@ -215,7 +229,9 @@ Controller sizing is evidence-backed **through 500 agents** (about **6–8 MB/ag
 
 ## Security
 
-Read-only diagnostics. No deletion of user data, no modification of backups, no secret printing from Compose, `.env`, or backup tools.
+Coverage discovery, snapshot inspection, and integrity checks do not modify live application data or backup repositories. Optional restore verification does run a real `restic restore`, but only into a BackupLint-owned temporary directory that is safety-checked and cleaned up afterward; it does not restore over live application paths or mutate the repository.
+
+No deletion of user data, no modification of backups, and no secret printing from Compose, `.env`, or backup tools.
 
 Container images: digest-pinned `python:3.12-slim-bookworm`, Trivy-reviewed, residual CVEs remain. **Not a “zero CVE” claim.** Agent: non-root uid 10001, unprivileged, no baked secrets.
 
@@ -252,6 +268,8 @@ Feedback is welcome. Please use the channel that matches what you need:
 - **Feature request / improvement idea:** [request a feature](https://github.com/Netryon/BackupLint/issues/new?template=feature_request.yml)
 - **Setup / usage question:** [ask a question](https://github.com/Netryon/BackupLint/issues/new?template=question.yml)
 - **Security vulnerability:** use a [private GitHub Security Advisory](https://github.com/Netryon/BackupLint/security/advisories/new) — do **not** post secrets or vulnerability details in a public issue.
+
+For first-run feedback, it is especially useful to include your host distro/architecture, whether you used standalone or fleet mode, whether the first scan completed, whether the output was useful, and any **sanitized** error text.
 
 Before posting logs or configuration, remove passwords, tokens, private keys, internal hostnames/IPs, repository credentials, and personal data.
 

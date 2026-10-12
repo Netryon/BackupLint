@@ -4,6 +4,16 @@
 
 BackupLint **v1.0.0** is on [PyPI](https://pypi.org/project/backuplint/) and in the [GitHub Release](https://github.com/Netryon/BackupLint/releases/tag/v1.0.0).
 
+### Fastest path to a first result
+
+If you have one Docker Compose host, use **Standalone**:
+
+1. `pip install backuplint`
+2. create `backuplint.yml` with the host paths your real backup job is intended to protect
+3. run `backuplint scan compose.yml`
+
+That first check requires Docker Engine + Compose discovery, but **does not require Restic, a controller, agents, the dashboard, SIEM, or fleet setup**. It is a configuration/coverage comparison only. After it is useful, add Restic-backed snapshot, integrity, and restore-verification checks for stronger evidence.
+
 ---
 
 ## 1. What BackupLint does
@@ -95,6 +105,8 @@ Full native layout, roles, and uninstall: [installation.md](installation.md).
 
 ## 5. Your first local audit
 
+For this first configuration-only check, Docker Engine + Compose are required. Restic and all fleet components are optional and can be added later.
+
 Work on the Compose **host**. Create two files in the same directory (example paths only).
 
 `compose.yml`:
@@ -142,7 +154,7 @@ Result: FAIL
 
 | Result | Meaning |
 | --- | --- |
-| **PASS** | Evaluated persistent mounts are covered, and requested integrity/restore checks passed (or were not requested). **Not** “disaster recovery is guaranteed.” |
+| **PASS** | The checks that actually ran passed. With no Restic checks configured, this means the declared path-coverage comparison passed; it does **not** prove that a backup job ran. Requested integrity/restore checks must also pass when enabled. **Not** “disaster recovery is guaranteed.” |
 | **WARN** | Nothing critically uncovered, but something needs review (stale snapshot, missing named volume locally, advisory database note, skipped restore, and similar). Exit code `0`. |
 | **FAIL** | An assurance condition failed: uncovered persistent data, Restic integrity **inconsistency**, or restore verification **failure**. Exit code `1`. |
 | **ERROR** | The check could **not** be completed (bad config, Docker/Compose unavailable, Restic auth, missing/unreachable repository, lock, timeout). CLI `scan` prints the error and exits `2`. Fleet/dashboard store this as **ERROR**, not as coverage FAIL. |
@@ -452,6 +464,17 @@ Selected paths restored into a temp directory and files were readable. That prov
 | Dashboard inaccessible | `--dashboard`, password hash, HTTPS URL, firewall to `8443` |
 
 Full list: [troubleshooting.md](troubleshooting.md).
+
+---
+
+## First-run feedback
+
+If the first setup or scan is confusing, use the existing GitHub issue templates:
+
+- [Setup / usage question](https://github.com/Netryon/BackupLint/issues/new?template=question.yml)
+- [Bug report](https://github.com/Netryon/BackupLint/issues/new?template=bug_report.yml)
+
+Useful first-run details are: host distro/architecture, standalone vs fleet, whether the first scan completed, whether the output was useful, and sanitized error text. Remove passwords, tokens, private keys, repository credentials, internal hostnames/IPs, and personal data before posting.
 
 ---
 

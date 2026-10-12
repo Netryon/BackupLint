@@ -1,6 +1,6 @@
 # How BackupLint Works
 
-BackupLint is being built in small milestones. This document explains the intended design in plain language and will grow as features land.
+BackupLint v1.0.0 is an independent backup-assurance tool for Docker Compose. This document explains the current v1 behavior in plain language. For installation and first-use steps, see the [User Guide](user-guide.md).
 
 ## The problem
 
@@ -15,15 +15,18 @@ Configured backup paths
           ↓
       BackupLint
           ↓
-PASS / WARN / FAIL report
+PASS / WARN / FAIL
+or operational ERROR
 ```
 
 1. Read the Compose project configuration through Docker's resolved config.
 2. Discover mounts and classify obvious cache/temporary storage.
 3. Compare persistent bind-mount host paths with configured `backup_paths`.
-4. Report protected paths, missing coverage, skipped mounts, and unsupported cases.
+4. Optionally compare coverage with relevant Restic snapshots and freshness.
+5. Optionally run Restic integrity and isolated restore-verification checks.
+6. Report protected paths, missing coverage, skipped mounts, warnings, failures, and operational errors.
 
-## Current status
+## Basic local scan
 
 ```bash
 backuplint scan compose.yml
@@ -70,7 +73,7 @@ backup_paths:
   - /srv/docker
 ```
 
-Optional top-level `schema_version: 1` marks the configuration schema. If omitted, BackupLint treats the file as legacy schema 1 (current v0.5). Unsupported future versions are rejected rather than guessed.
+Optional top-level `schema_version: 1` marks the configuration schema. If omitted, BackupLint treats the file as schema 1 for backward compatibility. Unsupported future versions are rejected rather than guessed.
 
 For each persistent bind mount host path, BackupLint checks whether any configured backup path:
 
@@ -101,9 +104,11 @@ That host path is then compared with `backup_paths` using the same parent/child 
 
 Unused volumes declared in Compose but not mounted by any service are ignored. BackupLint audits mounts that services actually use.
 
-## Read-only rule
+## Safety boundary
 
-BackupLint inspects configuration and reports findings. It does not change Compose files, Docker volumes, or backup repositories.
+BackupLint does not change Compose files, live Docker volumes, or backup repository contents. Coverage, snapshot listing, and integrity checks are inspection/read-only operations with respect to those assets.
+
+If restore verification is explicitly enabled, BackupLint does run a real `restic restore` into a safety-checked, BackupLint-owned temporary directory. It validates restored content there and cleans up only that owned destination. It does not restore over live audited application paths.
 
 ## Restic snapshots and integrity
 
@@ -113,9 +118,10 @@ When `restic` is configured, BackupLint runs:
 restic snapshots --json
 ```
 
-Configured `restic.password_file` always overrides ambient `RESTIC_PASSWORD` /
-`RESTIC_PASSWORD_FILE` from the process environment. Ambient credentials are used
-only when the config does not supply a password file.
+Configured `restic.password` SecretRef takes precedence over legacy
+`restic.password_file`; configured credentials override ambient
+`RESTIC_PASSWORD` / `RESTIC_PASSWORD_FILE`. BackupLint does not silently fall
+back to another credential source after a configured source fails.
 
 For each audited host path, BackupLint selects the newest snapshot whose backup roots cover that path. A newer snapshot of an unrelated root (for example `/etc`) does not hide an older snapshot that covers `/srv/docker`.
 
@@ -148,11 +154,12 @@ This does not claim filesystem backups are invalid. It reminds operators to veri
 
 ## Audit results
 
-Each scan ends with `Result: PASS`, `WARN`, or `FAIL`:
+Completed audits use `PASS`, `WARN`, or `FAIL`. Operational failures that prevent the scan from completing use `ERROR` in fleet/dashboard state and CLI exit code `2`:
 
-- `PASS`: all evaluated persistent bind mounts are protected and requested integrity passed (or was not requested)
+- `PASS`: the checks that ran passed; with no Restic-backed checks configured, this is only a coverage/configuration result
 - `WARN`: no critical gaps, but something needs review (stale snapshots, unresolved volumes, stale remembered integrity)
 - `FAIL`: at least one persistent bind mount is not covered, or requested integrity reported repository inconsistency
+- `ERROR`: the requested check could not be completed because of configuration/runtime/operational failure (for example Docker unavailable, Restic auth/repository/lock/timeout)
 
 ## Exit codes
 
@@ -160,7 +167,7 @@ Each scan ends with `Result: PASS`, `WARN`, or `FAIL`:
 |------|---------|
 | 0 | `PASS` or `WARN` |
 | 1 | `FAIL` |
-| 2 | Configuration or runtime error |
+| 2 | Operational `ERROR` / configuration or runtime failure |
 
 ## Restic restore verification
 
@@ -168,4 +175,6 @@ When restore verification is enabled (`restic.restore_verification.mode` or
 `--restore-verify`), BackupLint performs a real `restic restore` of relevant
 audited paths into an isolated temporary directory and validates restored
 content. This is separate from coverage and integrity checks and never writes
-over live application data. See [restore-verification.md](restore-verification.md).
+over live application data. In the current v1 implementation, `selected` and
+`full` both remain scoped to the relevant audited paths; neither means a whole
+host/application disaster-recovery exercise. See [restore-verification.md](restore-verification.md).
